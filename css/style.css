@@ -1,0 +1,125 @@
+/* Flying Tire Games — site styles */
+:root {
+  --bg: #1b1e2e;
+  --panel: #262a40;
+  --text: #f5efe8;
+  --muted: #b9c0d9;
+  --sky: #9ad3f0;
+  --sky-dark: #6cbde6;
+  --ink: #12142a;
+  --link: #8fc4ff;
+  --radius: 18px;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  overflow-x: hidden;
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--link); }
+h1, h2, h3 { font-family: "Almarai", -apple-system, Helvetica, Arial, sans-serif; line-height: 1.15; margin: 0 0 .5em; }
+h1 { font-size: clamp(2.4rem, 7vw, 4.5rem); font-weight: 800; }
+h2 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 700; }
+h3 { font-size: 1.4rem; font-weight: 800; }
+main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
+
+/* Header */
+.site-header {
+  background: var(--sky); display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 10px max(16px, calc((100% - 1120px) / 2));
+  position: sticky; top: 0; z-index: 10;
+}
+.logo img { width: 72px; height: 72px; }
+.nav { display: flex; gap: 4px; background: rgba(255,255,255,.55); border-radius: 14px; padding: 4px; }
+.nav a {
+  color: var(--ink); text-decoration: none; font-family: "Almarai", sans-serif; font-weight: 800;
+  font-size: 1.05rem; padding: 8px 14px; border-radius: 10px; white-space: nowrap;
+}
+.nav a[aria-current="page"], .nav a:hover { background: #fff; }
+
+/* Hero */
+.hero { padding: 48px 0 16px; max-width: 820px; }
+.hero p { color: var(--muted); font-size: 1.15rem; }
+
+/* App grid + cards */
+.apps h2 { margin-top: 24px; }
+.grid {
+  display: grid; gap: 40px 32px;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+}
+.card { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.card[hidden] { display: none; }
+.card h3 { margin: 18px 0 4px; }
+.card h3 a { color: var(--text); text-decoration: none; }
+.card h3 a:hover { text-decoration: underline; }
+.tagline { color: var(--muted); margin: 0 0 6px; }
+.more { margin: 2px 0 4px; text-decoration: none; font-weight: 600; }
+.more:hover { text-decoration: underline; }
+
+/* Buttons */
+.btn {
+  display: inline-block; margin-top: 14px; padding: 12px 26px; border-radius: 12px;
+  background: var(--sky); color: var(--ink); font-weight: 700; text-decoration: none;
+  border: 2px solid var(--sky);
+}
+.btn:hover { background: #fff; }
+.btn.soon { background: transparent; color: var(--muted); border-color: #4a4f6b; cursor: default; }
+
+/* Carousel */
+.carousel { position: relative; width: 100%; max-width: 480px; border-radius: var(--radius); overflow: hidden; background: var(--panel); }
+.track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none; }
+.track::-webkit-scrollbar { display: none; }
+.slide { flex: 0 0 100%; scroll-snap-align: start; aspect-ratio: 3 / 4; }
+.slide img, .slide a { width: 100%; height: 100%; object-fit: cover; }
+.arrow {
+  position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px;
+  border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 22px; line-height: 1; cursor: pointer;
+}
+.arrow:hover { background: rgba(0,0,0,.8); }
+.arrow.prev { left: 10px; } .arrow.next { right: 10px; }
+.dots { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 7px; }
+.dot { width: 9px; height: 9px; padding: 0; border: 0; border-radius: 50%; background: rgba(255,255,255,.45); cursor: pointer; }
+.dot.active { background: #fff; }
+
+/* App pages */
+.app-hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: center; padding-top: 40px; }
+.app-hero .subtitle { font-weight: 400; font-size: clamp(1.4rem, 3.5vw, 2.1rem); }
+.app-hero p { color: var(--muted); font-size: 1.1rem; }
+.app-hero-art img { border-radius: var(--radius); width: 100%; max-width: 440px; margin-left: auto; }
+.app-gallery { padding: 40px 0 8px; }
+.app-gallery .carousel { margin: 0 auto 0 0; }
+.app-body { max-width: 760px; }
+.app-body h2 { margin-top: 36px; }
+.app-body p { color: var(--muted); }
+.features { padding-left: 1.2em; color: var(--muted); }
+.features li { margin: 6px 0; }
+.back { margin-top: 28px; }
+
+/* Privacy */
+.policy { max-width: 820px; padding-top: 40px; }
+.policy p, .policy li { color: var(--muted); }
+.policy-toc ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.policy-toc a { display: inline-block; padding: 6px 12px; border-radius: 10px; background: var(--panel); text-decoration: none; }
+.policy-app { border-top: 1px solid #3a3f5c; margin-top: 36px; padding-top: 12px; scroll-margin-top: 110px; }
+.policy-app h3 { font-size: 1.15rem; margin-top: 1.2em; }
+
+/* Footer */
+.site-footer { border-top: 1px solid #3a3f5c; padding: 28px 16px 40px; text-align: center; color: var(--muted); }
+.site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; margin-bottom: 8px; }
+.site-footer a { color: var(--text); text-decoration: none; }
+.site-footer a:hover { text-decoration: underline; }
+
+/* Phones */
+@media (max-width: 760px) {
+  .app-hero { grid-template-columns: 1fr; gap: 24px; padding-top: 24px; }
+  .app-hero-art img { margin: 0 auto; }
+  .app-gallery .carousel { margin: 0 auto; }
+}
+@media (max-width: 480px) {
+  body { font-size: 16px; }
+  .logo img { width: 56px; height: 56px; }
+  .nav a { font-size: .95rem; padding: 7px 10px; }
+  .hero { padding-top: 28px; }
+}
