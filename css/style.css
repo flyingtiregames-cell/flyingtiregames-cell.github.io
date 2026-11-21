@@ -170,3 +170,8 @@ figcaption { font-size: .92rem; color: var(--muted); margin-top: 10px; }
 .guide-card strong { color: var(--text); font-size: 1.15rem; }
 .guide-card:hover { outline: 2px solid var(--sky); }
 @media (max-width: 480px) { .breeds { columns: 1; } .quick, .toc, .cta { padding: 16px 18px; } }
+.hex { width: min(100%, 340px); height: auto; display: block; }
+.chart { border-collapse: collapse; width: 100%; max-width: 520px; margin: 12px 0 18px; }
+.chart th, .chart td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #3a3f5c; color: var(--text); }
+.chart th { color: var(--muted); font-weight: 600; font-size: .95rem; }
+.orb { display: inline-flex; width: 28px; height: 28px; border-radius: 50%; align-items: center; justify-content: center; font-size: .9rem; vertical-align: middle; margin-right: 4px; }
