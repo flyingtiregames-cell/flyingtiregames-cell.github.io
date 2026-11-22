@@ -58,6 +58,7 @@
 <div id="question" class="screen">
   <div class="seconds" id="secondsLeft"></div>
   <div class="timer"><div id="timerBar"></div></div>
+  <div class="msg" id="qText"></div>
   <div class="hint" id="qHint"></div>
   <div class="answers" id="answers"></div>
   <button id="lockBtn">Lock In</button>
@@ -145,8 +146,9 @@
     lockedIn = false;
 
     const multi = msg.qtype === "multi";
+    document.getElementById("qText").textContent = msg.text || "";
     document.getElementById("qHint").textContent =
-      multi ? "Pick ALL the right answers, then Lock In" : "Watch the big screen and pick an answer";
+      multi ? "Pick ALL the right answers, then Lock In" : "";
 
     const box = document.getElementById("answers");
     box.innerHTML = "";
