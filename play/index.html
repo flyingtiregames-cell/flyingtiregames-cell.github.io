@@ -25,12 +25,18 @@
     border: none; background: #ffb627; color: #1b1530;
   }
   button:active { transform: scale(0.97); }
+  .answers { display: flex; flex-direction: column; gap: 12px; }
   .answers button { background: #fff; text-align: left; }
   .answers button.picked { background: #ffb627; }
+  #lockBtn { background: #7dffa0; display: none; }
+  .hint { font-size: 15px; opacity: 0.75; text-align: center; }
   .msg { font-size: 20px; text-align: center; line-height: 1.4; }
   .error { color: #ff8a8a; font-size: 16px; text-align: center; min-height: 20px; }
+  .timer { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.15); overflow: hidden; }
+  .timer div { height: 100%; width: 100%; background: #ffb627; }
   .result-right { color: #7dffa0; font-size: 34px; font-weight: 800; text-align: center; }
   .result-wrong { color: #ff8a8a; font-size: 34px; font-weight: 800; text-align: center; }
+  .points { font-size: 22px; text-align: center; }
 </style>
 </head>
 <body>
@@ -48,12 +54,15 @@
 </div>
 
 <div id="question" class="screen">
-  <div class="msg" id="qText"></div>
-  <div class="answers screen on" id="answers"></div>
+  <div class="timer"><div id="timerBar"></div></div>
+  <div class="hint" id="qHint"></div>
+  <div class="answers" id="answers"></div>
+  <button id="lockBtn">Lock In</button>
 </div>
 
 <div id="result" class="screen">
   <div id="resultText"></div>
+  <div class="points" id="pointsText"></div>
   <div class="msg">Watch the big screen.</div>
 </div>
 
@@ -64,8 +73,13 @@
   let socket = null;
   let myCode = "";
   let myName = "";
-  let myChoice = null;
   let reconnectTries = 0;
+
+  // Current question state
+  let currentQid = null;
+  let picks = [];          // option indexes this player picked
+  let lockedIn = false;
+  let timerHandle = null;
 
   function pid() {
     let id = null;
@@ -83,8 +97,93 @@
     document.getElementById(id).classList.add("on");
   }
 
+  function waitScreen(html) {
+    document.getElementById("waitMsg").innerHTML = html;
+    show("waiting");
+  }
+
   function send(obj) {
     if (socket && socket.readyState === 1) socket.send(JSON.stringify(obj));
+  }
+
+  function stopTimer() {
+    if (timerHandle) { clearInterval(timerHandle); timerHandle = null; }
+  }
+
+  function startTimer(seconds) {
+    stopTimer();
+    const bar = document.getElementById("timerBar");
+    const endAt = Date.now() + seconds * 1000;
+    bar.style.width = "100%";
+    timerHandle = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      bar.style.width = (left / (seconds * 1000) * 100) + "%";
+      if (left <= 0) {
+        stopTimer();
+        if (!lockedIn) waitScreen("Time's up!<br>Watch the big screen.");
+      }
+    }, 100);
+  }
+
+  function lockIn() {
+    if (lockedIn || picks.length === 0) return;
+    lockedIn = true;
+    // "choice" is kept for the old host test screen
+    send({ type: "answer", qid: currentQid, picks: picks, choice: picks[0] });
+    setTimeout(() => waitScreen("Locked in!<br>Waiting for everyone else."), 300);
+  }
+
+  function showQuestion(msg) {
+    currentQid = msg.qid;
+    picks = [];
+    lockedIn = false;
+
+    const multi = msg.qtype === "multi";
+    document.getElementById("qHint").textContent =
+      multi ? "Pick ALL the right answers, then Lock In" : "Watch the big screen and pick an answer";
+
+    const box = document.getElementById("answers");
+    box.innerHTML = "";
+    msg.options.forEach((option, i) => {
+      const b = document.createElement("button");
+      b.textContent = (msg.qtype === "truefalse" ? "" : LETTERS[i] + ".  ") + option;
+      b.onclick = () => {
+        if (lockedIn) return;
+        if (multi) {
+          if (picks.includes(i)) {
+            picks = picks.filter(p => p !== i);
+            b.classList.remove("picked");
+          } else {
+            picks.push(i);
+            b.classList.add("picked");
+          }
+        } else {
+          picks = [i];
+          b.classList.add("picked");
+          lockIn();
+        }
+      };
+      box.appendChild(b);
+    });
+
+    document.getElementById("lockBtn").style.display = multi ? "block" : "none";
+    show("question");
+    startTimer(msg.seconds || 20);
+  }
+
+  function showReveal(msg) {
+    stopTimer();
+    const correct = Array.isArray(msg.correct) ? msg.correct : [msg.correct];
+    const right = lockedIn &&
+      picks.length === correct.length && correct.every(c => picks.includes(c));
+    const r = document.getElementById("resultText");
+    if (right) {
+      r.className = "result-right"; r.textContent = "Correct!";
+    } else {
+      r.className = "result-wrong"; r.textContent = lockedIn ? "Wrong!" : "Too slow!";
+    }
+    document.getElementById("pointsText").textContent = "";
+    show("result");
   }
 
   function connect() {
@@ -97,45 +196,23 @@
 
       if (msg.type === "welcome") {
         reconnectTries = 0;
-        show("waiting");
+        waitScreen("You're in!<br>Watch the big screen.");
       }
-
       if (msg.type === "error") {
+        stopTimer();
         document.getElementById("joinError").textContent = msg.message;
         show("join");
       }
-
-      if (msg.type === "question") {
-        myChoice = null;
-        document.getElementById("qText").textContent = msg.text;
-        const box = document.getElementById("answers");
-        box.innerHTML = "";
-        msg.options.forEach((option, i) => {
-          const b = document.createElement("button");
-          b.textContent = LETTERS[i] + ".  " + option;
-          b.onclick = () => {
-            if (myChoice !== null) return;
-            myChoice = i;
-            b.classList.add("picked");
-            send({ type: "answer", qid: msg.qid, choice: i });
-            setTimeout(() => {
-              document.getElementById("waitMsg").innerHTML = "Locked in!<br>Waiting for everyone else.";
-              show("waiting");
-            }, 400);
-          };
-          box.appendChild(b);
-        });
-        show("question");
+      if (msg.type === "wait") {
+        stopTimer();
+        waitScreen(msg.text || "Watch the big screen.");
       }
-
-      if (msg.type === "reveal") {
-        const r = document.getElementById("resultText");
-        if (myChoice === msg.correct) {
-          r.className = "result-right"; r.textContent = "Correct!";
-        } else {
-          r.className = "result-wrong"; r.textContent = myChoice === null ? "Too slow!" : "Wrong!";
-        }
-        show("result");
+      if (msg.type === "question") showQuestion(msg);
+      if (msg.type === "reveal") showReveal(msg);
+      if (msg.type === "score") {
+        // Sent privately to this phone after a reveal
+        document.getElementById("pointsText").textContent =
+          (msg.points > 0 ? "+" + msg.points + " points · " : "") + "Total: " + msg.total;
       }
     };
 
@@ -146,11 +223,14 @@
         reconnectTries++;
         setTimeout(connect, 2000);
       } else {
+        stopTimer();
         document.getElementById("joinError").textContent = "Lost connection. Try joining again.";
         show("join");
       }
     };
   }
+
+  document.getElementById("lockBtn").onclick = lockIn;
 
   document.getElementById("joinBtn").onclick = () => {
     myCode = document.getElementById("code").value.trim().toUpperCase();
