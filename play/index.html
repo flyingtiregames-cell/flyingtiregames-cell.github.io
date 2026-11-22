@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex">
+<title>Join the game · Flying Tire Games</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; font-family: -apple-system, system-ui, sans-serif;
+    background: #1b1530; color: #fff; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  h1 { font-size: 26px; margin: 0 0 20px; text-align: center; }
+  .screen { width: 100%; max-width: 420px; display: none; flex-direction: column; gap: 14px; }
+  .screen.on { display: flex; }
+  input {
+    width: 100%; font-size: 22px; padding: 14px; border-radius: 12px; border: none;
+    text-align: center; text-transform: uppercase;
+  }
+  #name { text-transform: none; }
+  button {
+    width: 100%; font-size: 22px; font-weight: 700; padding: 18px; border-radius: 14px;
+    border: none; background: #ffb627; color: #1b1530;
+  }
+  button:active { transform: scale(0.97); }
+  .answers button { background: #fff; text-align: left; }
+  .answers button.picked { background: #ffb627; }
+  .msg { font-size: 20px; text-align: center; line-height: 1.4; }
+  .error { color: #ff8a8a; font-size: 16px; text-align: center; min-height: 20px; }
+  .result-right { color: #7dffa0; font-size: 34px; font-weight: 800; text-align: center; }
+  .result-wrong { color: #ff8a8a; font-size: 34px; font-weight: 800; text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="join" class="screen on">
+  <h1>Join the game</h1>
+  <input id="code" placeholder="ROOM CODE" maxlength="4" autocomplete="off" autocapitalize="characters">
+  <input id="name" placeholder="Your name" maxlength="16" autocomplete="off">
+  <button id="joinBtn">Join</button>
+  <div id="joinError" class="error"></div>
+</div>
+
+<div id="waiting" class="screen">
+  <div class="msg" id="waitMsg">You're in!<br>Watch the big screen.</div>
+</div>
+
+<div id="question" class="screen">
+  <div class="msg" id="qText"></div>
+  <div class="answers screen on" id="answers"></div>
+</div>
+
+<div id="result" class="screen">
+  <div id="resultText"></div>
+  <div class="msg">Watch the big screen.</div>
+</div>
+
+<script>
+  const RELAY = "wss://herb-trivia-relay.flyingtiregames.workers.dev";
+  const LETTERS = ["A", "B", "C", "D", "E", "F"];
+
+  let socket = null;
+  let myCode = "";
+  let myName = "";
+  let myChoice = null;
+  let reconnectTries = 0;
+
+  function pid() {
+    let id = null;
+    try { id = localStorage.getItem("ftg_pid"); } catch (e) {}
+    if (!id) {
+      id = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+      try { localStorage.setItem("ftg_pid", id); } catch (e) {}
+    }
+    return id;
+  }
+  const myId = pid();
+
+  function show(id) {
+    document.querySelectorAll("body > .screen").forEach(s => s.classList.remove("on"));
+    document.getElementById(id).classList.add("on");
+  }
+
+  function send(obj) {
+    if (socket && socket.readyState === 1) socket.send(JSON.stringify(obj));
+  }
+
+  function connect() {
+    const url = RELAY + "/play?code=" + encodeURIComponent(myCode) +
+                "&name=" + encodeURIComponent(myName) + "&pid=" + encodeURIComponent(myId);
+    socket = new WebSocket(url);
+
+    socket.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+
+      if (msg.type === "welcome") {
+        reconnectTries = 0;
+        show("waiting");
+      }
+
+      if (msg.type === "error") {
+        document.getElementById("joinError").textContent = msg.message;
+        show("join");
+      }
+
+      if (msg.type === "question") {
+        myChoice = null;
+        document.getElementById("qText").textContent = msg.text;
+        const box = document.getElementById("answers");
+        box.innerHTML = "";
+        msg.options.forEach((option, i) => {
+          const b = document.createElement("button");
+          b.textContent = LETTERS[i] + ".  " + option;
+          b.onclick = () => {
+            if (myChoice !== null) return;
+            myChoice = i;
+            b.classList.add("picked");
+            send({ type: "answer", qid: msg.qid, choice: i });
+            setTimeout(() => {
+              document.getElementById("waitMsg").innerHTML = "Locked in!<br>Waiting for everyone else.";
+              show("waiting");
+            }, 400);
+          };
+          box.appendChild(b);
+        });
+        show("question");
+      }
+
+      if (msg.type === "reveal") {
+        const r = document.getElementById("resultText");
+        if (myChoice === msg.correct) {
+          r.className = "result-right"; r.textContent = "Correct!";
+        } else {
+          r.className = "result-wrong"; r.textContent = myChoice === null ? "Too slow!" : "Wrong!";
+        }
+        show("result");
+      }
+    };
+
+    socket.onclose = (event) => {
+      // 4000 = replaced, 4001 = host left, 4004 = room not found: don't retry
+      if ([4000, 4001, 4004].includes(event.code)) return;
+      if (reconnectTries < 5) {
+        reconnectTries++;
+        setTimeout(connect, 2000);
+      } else {
+        document.getElementById("joinError").textContent = "Lost connection. Try joining again.";
+        show("join");
+      }
+    };
+  }
+
+  document.getElementById("joinBtn").onclick = () => {
+    myCode = document.getElementById("code").value.trim().toUpperCase();
+    myName = document.getElementById("name").value.trim();
+    document.getElementById("joinError").textContent = "";
+    if (!/^[A-Z]{4}$/.test(myCode)) {
+      document.getElementById("joinError").textContent = "Room codes are 4 letters.";
+      return;
+    }
+    if (!myName) {
+      document.getElementById("joinError").textContent = "Type your name.";
+      return;
+    }
+    reconnectTries = 0;
+    connect();
+  };
+
+  // A link like flyingtiregames.com/play/?code=ABCD fills in the code
+  const preset = new URLSearchParams(location.search).get("code");
+  if (preset) document.getElementById("code").value = preset.toUpperCase();
+</script>
+</body>
+</html>
