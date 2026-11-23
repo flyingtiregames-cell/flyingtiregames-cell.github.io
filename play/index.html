@@ -39,6 +39,13 @@
   .result-right { color: #7dffa0; font-size: 34px; font-weight: 800; text-align: center; }
   .result-wrong { color: #ff8a8a; font-size: 34px; font-weight: 800; text-align: center; }
   .points { font-size: 22px; text-align: center; }
+  .meter { position: relative; width: 100%; height: 70px; border-radius: 14px;
+           background: rgba(255,255,255,0.15); overflow: hidden; }
+  .meter .zone { position: absolute; top: 0; bottom: 0; background: #7dffa0; opacity: 0.85; }
+  .meter .needle { position: absolute; top: 0; bottom: 0; width: 6px; margin-left: -3px;
+                   background: #ffb627; box-shadow: 0 0 10px #ffb627; }
+  #stopBtn { font-size: 34px; padding: 28px; background: #ff5a5a; color: #fff; }
+  .token { font-size: 30px; font-weight: 800; text-align: center; color: #ffd84d; line-height: 1.4; }
 </style>
 </head>
 <body>
@@ -62,6 +69,19 @@
   <div class="hint" id="qHint"></div>
   <div class="answers" id="answers"></div>
   <button id="lockBtn">Lock In</button>
+</div>
+
+<div id="meterScreen" class="screen">
+  <div class="msg">Stop the needle in the green zone!</div>
+  <div class="seconds" id="meterSeconds"></div>
+  <div class="meter"><div class="zone" id="meterZone"></div><div class="needle" id="meterNeedle"></div></div>
+  <button id="stopBtn">STOP</button>
+</div>
+
+<div id="tokenScreen" class="screen">
+  <div class="token">✨ You earned a secret token! ✨</div>
+  <div class="msg" id="tokenCount"></div>
+  <div class="hint">Keep it quiet. Use it in the final round.</div>
 </div>
 
 <div id="result" class="screen">
@@ -194,6 +214,70 @@
     show("result");
   }
 
+  // ----- Mini-game: Stop the Meter -----
+  // The needle runs on this phone and the phone measures where it stopped,
+  // so internet speed doesn't affect the result.
+  let meterAnim = null;
+  let meterTimeout = null;
+  let meterStopped = true;
+
+  function stopMeterAnimation() {
+    if (meterAnim) { cancelAnimationFrame(meterAnim); meterAnim = null; }
+    if (meterTimeout) { clearInterval(meterTimeout); meterTimeout = null; }
+  }
+
+  function startMeter(msg) {
+    stopMeterAnimation();
+    stopTimer();
+    meterStopped = false;
+
+    const target = msg.target;
+    const zone = msg.zone || 8;
+    const zoneEl = document.getElementById("meterZone");
+    zoneEl.style.left = (target - zone / 2) + "%";
+    zoneEl.style.width = zone + "%";
+
+    const needle = document.getElementById("meterNeedle");
+    const period = 1400;                        // ms for one full sweep there and back
+    const offset = Math.random() * period;      // each phone starts somewhere different
+    const startedAt = performance.now();
+    let position = 0;
+
+    function frame(now) {
+      const p = ((now - startedAt + offset) % period) / period;
+      position = p < 0.5 ? p * 200 : (1 - p) * 200;   // 0 → 100 → 0
+      needle.style.left = position + "%";
+      meterAnim = requestAnimationFrame(frame);
+    }
+    meterAnim = requestAnimationFrame(frame);
+
+    document.getElementById("stopBtn").onclick = () => {
+      if (meterStopped) return;
+      meterStopped = true;
+      stopMeterAnimation();
+      const distance = Math.abs(position - target);
+      send({ type: "meter", distance: Math.round(distance * 100) / 100 });
+      const accuracy = Math.max(0, Math.round(100 - distance));
+      setTimeout(() => waitScreen("Stopped!<br>" + accuracy + "% accurate"), 500);
+    };
+
+    const seconds = msg.seconds || 15;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("meterSeconds");
+    label.textContent = seconds;
+    meterTimeout = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0 && !meterStopped) {
+        meterStopped = true;
+        stopMeterAnimation();
+        waitScreen("Time's up!<br>Watch the big screen.");
+      }
+    }, 200);
+
+    show("meterScreen");
+  }
+
   function connect() {
     const url = RELAY + "/play?code=" + encodeURIComponent(myCode) +
                 "&name=" + encodeURIComponent(myName) + "&pid=" + encodeURIComponent(myId);
@@ -213,7 +297,15 @@
       }
       if (msg.type === "wait") {
         stopTimer();
+        stopMeterAnimation();
         waitScreen(msg.text || "Watch the big screen.");
+      }
+      if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
+      if (msg.type === "token") {
+        stopMeterAnimation();
+        document.getElementById("tokenCount").textContent =
+          "You have " + msg.total + (msg.total === 1 ? " token." : " tokens.");
+        show("tokenScreen");
       }
       if (msg.type === "question") showQuestion(msg);
       if (msg.type === "reveal") showReveal(msg);
