@@ -48,6 +48,12 @@
   .bases { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
   .bases button { font-size: 30px; padding: 22px 0; background: #fff; }
   .bases button.picked { background: #ffb627; }
+  .orbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; justify-items: center; }
+  .orbs button { background: none; padding: 0; width: 100%; max-width: 110px; border-radius: 50%; }
+  .orbs button img { width: 100%; display: block; }
+  .orbs button.flash { transform: scale(0.88); filter: brightness(1.4); }
+  .orbTrail { display: flex; gap: 6px; justify-content: center; min-height: 40px; flex-wrap: wrap; }
+  .orbTrail img { width: 36px; height: 36px; }
   .token { font-size: 30px; font-weight: 800; text-align: center; color: #ffd84d; line-height: 1.4; }
 </style>
 </head>
@@ -86,6 +92,13 @@
   <div class="seconds" id="sbSeconds"></div>
   <div class="bases" id="sbBases"></div>
   <div class="hint">Pick one. You can't change it!</div>
+</div>
+
+<div id="orbScreen" class="screen">
+  <div class="msg" id="omTitle"></div>
+  <div class="seconds" id="omSeconds"></div>
+  <div class="orbTrail" id="omTrail"></div>
+  <div class="orbs" id="omOrbs"></div>
 </div>
 
 <div id="tokenScreen" class="screen">
@@ -336,6 +349,73 @@
     show("safeBaseScreen");
   }
 
+  // ----- Mini-game: Orb Memory -----
+  // Same order as the host app: index 0-4
+  const ORBS = ["orb_fire", "orb_freeze", "orb_plant", "orb_rock", "orb_electric"];
+  let omTimer = null;
+
+  function stopOrbTimer() {
+    if (omTimer) { clearInterval(omTimer); omTimer = null; }
+  }
+
+  function startOrbMemory(msg) {
+    stopTimer();
+    stopMeterAnimation();
+    stopSafeBaseTimer();
+    stopOrbTimer();
+
+    const length = msg.length;
+    let picks = [];
+    let done = false;
+
+    const title = document.getElementById("omTitle");
+    const trail = document.getElementById("omTrail");
+    title.textContent = "Repeat the " + length + " orbs!";
+    trail.innerHTML = "";
+
+    const box = document.getElementById("omOrbs");
+    box.innerHTML = "";
+    ORBS.forEach((name, i) => {
+      const b = document.createElement("button");
+      const img = document.createElement("img");
+      img.src = "orbs/" + name + ".png";
+      img.alt = name;
+      b.appendChild(img);
+      b.onclick = () => {
+        if (done) return;
+        picks.push(i);
+        b.classList.add("flash");
+        setTimeout(() => b.classList.remove("flash"), 150);
+        const t = document.createElement("img");
+        t.src = "orbs/" + name + ".png";
+        trail.appendChild(t);
+        title.textContent = picks.length + " of " + length;
+        if (picks.length === length) {
+          done = true;
+          stopOrbTimer();
+          send({ type: "orbs", round: msg.round, picks: picks });
+          setTimeout(() => waitScreen("Locked in!<br>Watch the big screen."), 400);
+        }
+      };
+      box.appendChild(b);
+    });
+
+    const seconds = msg.seconds || 10;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("omSeconds");
+    label.textContent = seconds;
+    omTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) {
+        stopOrbTimer();
+        if (!done) { done = true; waitScreen("Time's up!"); }
+      }
+    }, 200);
+
+    show("orbScreen");
+  }
+
   function connect() {
     const url = RELAY + "/play?code=" + encodeURIComponent(myCode) +
                 "&name=" + encodeURIComponent(myName) + "&pid=" + encodeURIComponent(myId);
@@ -357,10 +437,16 @@
         stopTimer();
         stopMeterAnimation();
         stopSafeBaseTimer();
+        stopOrbTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
       if (msg.type === "minigame" && msg.game === "safebase") startSafeBase(msg);
+      if (msg.type === "minigame" && msg.game === "orbmemory") startOrbMemory(msg);
+      if (msg.type === "orbmemory_result") {
+        stopOrbTimer();
+        waitScreen(msg.correct ? "✅ You got it!" : "💥 Wrong order!<br>You're out.");
+      }
       if (msg.type === "safebase_result") {
         stopSafeBaseTimer();
         const hit = "Bases hit: " + msg.targets.join(", ");
