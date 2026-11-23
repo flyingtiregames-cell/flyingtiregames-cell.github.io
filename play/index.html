@@ -45,6 +45,9 @@
   .meter .needle { position: absolute; top: 0; bottom: 0; width: 6px; margin-left: -3px;
                    background: #ffb627; box-shadow: 0 0 10px #ffb627; }
   #stopBtn { font-size: 34px; padding: 28px; background: #ff5a5a; color: #fff; }
+  .bases { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .bases button { font-size: 30px; padding: 22px 0; background: #fff; }
+  .bases button.picked { background: #ffb627; }
   .token { font-size: 30px; font-weight: 800; text-align: center; color: #ffd84d; line-height: 1.4; }
 </style>
 </head>
@@ -76,6 +79,13 @@
   <div class="seconds" id="meterSeconds"></div>
   <div class="meter"><div class="zone" id="meterZone"></div><div class="needle" id="meterNeedle"></div></div>
   <button id="stopBtn">STOP</button>
+</div>
+
+<div id="safeBaseScreen" class="screen">
+  <div class="msg" id="sbTitle"></div>
+  <div class="seconds" id="sbSeconds"></div>
+  <div class="bases" id="sbBases"></div>
+  <div class="hint">Pick one. You can't change it!</div>
 </div>
 
 <div id="tokenScreen" class="screen">
@@ -278,6 +288,54 @@
     show("meterScreen");
   }
 
+  // ----- Mini-game: Safe Base -----
+  let sbTimer = null;
+
+  function stopSafeBaseTimer() {
+    if (sbTimer) { clearInterval(sbTimer); sbTimer = null; }
+  }
+
+  function startSafeBase(msg) {
+    stopTimer();
+    stopMeterAnimation();
+    stopSafeBaseTimer();
+    let picked = false;
+
+    document.getElementById("sbTitle").innerHTML =
+      "Round " + msg.round + ": pick a safe base!<br>" + msg.targets + " bases will be hit.";
+
+    const box = document.getElementById("sbBases");
+    box.innerHTML = "";
+    for (let base = 1; base <= (msg.bases || 8); base++) {
+      const b = document.createElement("button");
+      b.textContent = base;
+      b.onclick = () => {
+        if (picked) return;
+        picked = true;
+        b.classList.add("picked");
+        send({ type: "base", round: msg.round, base: base });
+        stopSafeBaseTimer();
+        setTimeout(() => waitScreen("Base " + base + " locked in!<br>Watch the big screen."), 400);
+      };
+      box.appendChild(b);
+    }
+
+    const seconds = msg.seconds || 10;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("sbSeconds");
+    label.textContent = seconds;
+    sbTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) {
+        stopSafeBaseTimer();
+        if (!picked) waitScreen("Time's up!<br>No base picked.");
+      }
+    }, 200);
+
+    show("safeBaseScreen");
+  }
+
   function connect() {
     const url = RELAY + "/play?code=" + encodeURIComponent(myCode) +
                 "&name=" + encodeURIComponent(myName) + "&pid=" + encodeURIComponent(myId);
@@ -298,9 +356,16 @@
       if (msg.type === "wait") {
         stopTimer();
         stopMeterAnimation();
+        stopSafeBaseTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
+      if (msg.type === "minigame" && msg.game === "safebase") startSafeBase(msg);
+      if (msg.type === "safebase_result") {
+        stopSafeBaseTimer();
+        const hit = "Bases hit: " + msg.targets.join(", ");
+        waitScreen(msg.safe ? "✅ Safe!<br>" + hit : "💥 You got hit!<br>You're out.<br>" + hit);
+      }
       if (msg.type === "token") {
         stopMeterAnimation();
         document.getElementById("tokenCount").textContent =
