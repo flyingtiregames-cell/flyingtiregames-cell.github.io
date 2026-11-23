@@ -378,7 +378,7 @@
     ORBS.forEach((name, i) => {
       const b = document.createElement("button");
       const img = document.createElement("img");
-      img.src = "orbs/" + name + ".png";
+      img.src = "/play/orbs/" + name + ".png";
       img.alt = name;
       b.appendChild(img);
       b.onclick = () => {
@@ -387,7 +387,7 @@
         b.classList.add("flash");
         setTimeout(() => b.classList.remove("flash"), 150);
         const t = document.createElement("img");
-        t.src = "orbs/" + name + ".png";
+        t.src = "/play/orbs/" + name + ".png";
         trail.appendChild(t);
         title.textContent = picks.length + " of " + length;
         if (picks.length === length) {
