@@ -409,7 +409,12 @@
       label.textContent = Math.ceil(left / 1000);
       if (left <= 0) {
         stopOrbTimer();
-        if (!done) { done = true; waitScreen("Time's up!"); }
+        if (!done) {
+          done = true;
+          // Send whatever was tapped so far; it still counts toward your %
+          if (picks.length > 0) send({ type: "orbs", round: msg.round, picks: picks });
+          waitScreen("Time's up!");
+        }
       }
     }, 200);
 
