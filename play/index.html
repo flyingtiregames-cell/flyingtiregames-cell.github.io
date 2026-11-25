@@ -51,6 +51,10 @@
   .orbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; justify-items: center; }
   .orbs button { background: none; padding: 0; width: 100%; max-width: 110px; border-radius: 50%; }
   .orbs button img { width: 100%; display: block; }
+  .tires { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .tires button { background: rgba(255,255,255,0.12); padding: 10px 4px; font-size: 17px; color: #fff; }
+  .tires button img { width: 100%; max-width: 96px; display: block; margin: 0 auto 6px; }
+  .tires button.picked { background: #ffb627; color: #1b1530; }
   .orbs button.flash { transform: scale(0.88); filter: brightness(1.4); }
   .orbTrail { display: flex; gap: 6px; justify-content: center; min-height: 40px; flex-wrap: wrap; }
   .orbTrail img { width: 36px; height: 36px; }
@@ -99,6 +103,12 @@
   <div class="seconds" id="omSeconds"></div>
   <div class="orbTrail" id="omTrail"></div>
   <div class="orbs" id="omOrbs"></div>
+</div>
+
+<div id="tireScreen" class="screen">
+  <div class="msg">Bet on the Space Tire!<br>Pick the tire you think will win.</div>
+  <div class="seconds" id="tireSeconds"></div>
+  <div class="tires" id="tireButtons"></div>
 </div>
 
 <div id="jarScreen" class="screen">
@@ -468,6 +478,51 @@
     show("jarScreen");
   }
 
+  // ----- Mini-game: Bet on the Space Tire -----
+  let tireTimer = null;
+
+  function stopTireTimer() {
+    if (tireTimer) { clearInterval(tireTimer); tireTimer = null; }
+  }
+
+  function startSpaceTire(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer();
+    let picked = false;
+    const tires = msg.tires || ["blue", "green", "red", "orange", "pink", "purple"];
+
+    const box = document.getElementById("tireButtons");
+    box.innerHTML = "";
+    tires.forEach((color, index) => {
+      const name = color.charAt(0).toUpperCase() + color.slice(1);
+      const b = document.createElement("button");
+      b.innerHTML = '<img src="/play/tires/tire_' + color + '.png" alt="">' + name;
+      b.onclick = () => {
+        if (picked) return;
+        picked = true;
+        b.classList.add("picked");
+        stopTireTimer();
+        send({ type: "tire", tire: index });
+        setTimeout(() => waitScreen("You bet on <b>" + name + "</b>!<br>Watch the big screen."), 400);
+      };
+      box.appendChild(b);
+    });
+
+    const seconds = msg.seconds || 10;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("tireSeconds");
+    label.textContent = seconds;
+    tireTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) {
+        stopTireTimer();
+        if (!picked) { picked = true; waitScreen("Time's up!<br>No bet this time."); }
+      }
+    }, 200);
+
+    show("tireScreen");
+  }
+
   function connect() {
     const url = RELAY + "/play?code=" + encodeURIComponent(myCode) +
                 "&name=" + encodeURIComponent(myName) + "&pid=" + encodeURIComponent(myId);
@@ -491,12 +546,14 @@
         stopSafeBaseTimer();
         stopOrbTimer();
         stopJarTimer();
+        stopTireTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
       if (msg.type === "minigame" && msg.game === "safebase") startSafeBase(msg);
       if (msg.type === "minigame" && msg.game === "orbmemory") startOrbMemory(msg);
       if (msg.type === "minigame" && msg.game === "orbjar") startOrbJar(msg);
+      if (msg.type === "minigame" && msg.game === "spacetire") startSpaceTire(msg);
       if (msg.type === "orbmemory_result") {
         stopOrbTimer();
         waitScreen(msg.correct ? "✅ You got it!" : "💥 Wrong order!<br>You're out.");
