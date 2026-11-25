@@ -101,6 +101,13 @@
   <div class="orbs" id="omOrbs"></div>
 </div>
 
+<div id="jarScreen" class="screen">
+  <div class="msg">How many orbs are in the jar?</div>
+  <div class="seconds" id="jarSeconds"></div>
+  <input id="jarGuess" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Your guess" min="0" max="999">
+  <button id="jarBtn">Lock In Guess</button>
+</div>
+
 <div id="tokenScreen" class="screen">
   <div class="token">✨ You earned a secret token! ✨</div>
   <div class="msg" id="tokenCount"></div>
@@ -421,6 +428,46 @@
     show("orbScreen");
   }
 
+  // ----- Mini-game: Orb Jar -----
+  let jarTimer = null;
+
+  function stopJarTimer() {
+    if (jarTimer) { clearInterval(jarTimer); jarTimer = null; }
+  }
+
+  function startOrbJar(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer();
+    let done = false;
+    const input = document.getElementById("jarGuess");
+    input.value = "";
+
+    document.getElementById("jarBtn").onclick = () => {
+      if (done) return;
+      const guess = parseInt(input.value, 10);
+      if (isNaN(guess) || guess < 0 || guess > 999) return;
+      done = true;
+      stopJarTimer();
+      input.blur();
+      send({ type: "jar", guess: guess });
+      waitScreen("Guess locked in: " + guess + "<br>Watch the big screen.");
+    };
+
+    const seconds = msg.seconds || 20;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("jarSeconds");
+    label.textContent = seconds;
+    jarTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) {
+        stopJarTimer();
+        if (!done) { done = true; input.blur(); waitScreen("Time's up!"); }
+      }
+    }, 200);
+
+    show("jarScreen");
+  }
+
   function connect() {
     const url = RELAY + "/play?code=" + encodeURIComponent(myCode) +
                 "&name=" + encodeURIComponent(myName) + "&pid=" + encodeURIComponent(myId);
@@ -443,11 +490,13 @@
         stopMeterAnimation();
         stopSafeBaseTimer();
         stopOrbTimer();
+        stopJarTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
       if (msg.type === "minigame" && msg.game === "safebase") startSafeBase(msg);
       if (msg.type === "minigame" && msg.game === "orbmemory") startOrbMemory(msg);
+      if (msg.type === "minigame" && msg.game === "orbjar") startOrbJar(msg);
       if (msg.type === "orbmemory_result") {
         stopOrbTimer();
         waitScreen(msg.correct ? "✅ You got it!" : "💥 Wrong order!<br>You're out.");
