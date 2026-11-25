@@ -51,6 +51,11 @@
   .orbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; justify-items: center; }
   .orbs button { background: none; padding: 0; width: 100%; max-width: 110px; border-radius: 50%; }
   .orbs button img { width: 100%; display: block; }
+  .board { display: grid; grid-template-columns: repeat(8, 1fr); border: 6px solid #8a4a22; border-radius: 6px; }
+  .board button { aspect-ratio: 1; padding: 0; border-radius: 0; background: #d6d2ca; }
+  .board button.dark { background: #6e6a66; }
+  .board button img { width: 86%; display: block; margin: auto; }
+  .board button:active { transform: none; }
   .tires { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
   .tires button { background: rgba(255,255,255,0.12); padding: 10px 4px; font-size: 17px; color: #fff; }
   .tires button img { width: 100%; max-width: 96px; display: block; margin: 0 auto 6px; }
@@ -103,6 +108,14 @@
   <div class="seconds" id="omSeconds"></div>
   <div class="orbTrail" id="omTrail"></div>
   <div class="orbs" id="omOrbs"></div>
+</div>
+
+<div id="boardScreen" class="screen">
+  <div class="msg" id="cbTitle"></div>
+  <div class="seconds" id="cbSeconds"></div>
+  <div class="board" id="cbBoard"></div>
+  <div class="hint" id="cbCount"></div>
+  <button id="cbDone">Done</button>
 </div>
 
 <div id="tireScreen" class="screen">
@@ -478,6 +491,84 @@
     show("jarScreen");
   }
 
+  // ----- Mini-game: Checkerboard Memory -----
+  let cbTimer = null;
+
+  function stopBoardTimer() {
+    if (cbTimer) { clearInterval(cbTimer); cbTimer = null; }
+  }
+
+  function boardCountdown(seconds, onEnd) {
+    stopBoardTimer();
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("cbSeconds");
+    label.textContent = seconds;
+    cbTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) { stopBoardTimer(); if (onEnd) onEnd(); }
+    }, 200);
+  }
+
+  function startCheckerboard(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer(); stopBoardTimer();
+    const box = document.getElementById("cbBoard");
+    const doneBtn = document.getElementById("cbDone");
+    const countLabel = document.getElementById("cbCount");
+
+    if (msg.stage === "study") {
+      document.getElementById("cbTitle").innerHTML = "Memorize the board<br>on the big screen!";
+      box.style.display = "none";
+      doneBtn.style.display = "none";
+      countLabel.textContent = "";
+      boardCountdown(msg.seconds || 15);
+      show("boardScreen");
+      return;
+    }
+
+    // Rebuild stage: tap a square to place or remove an orb
+    const placed = new Set();
+    let done = false;
+    document.getElementById("cbTitle").innerHTML = "Rebuild the board!<br>Wrong squares count against you.";
+    box.style.display = "";
+    doneBtn.style.display = "";
+    countLabel.textContent = "Orbs placed: 0";
+    box.innerHTML = "";
+
+    const sendBoard = (finished) => send({ type: "board", cells: Array.from(placed), done: finished });
+
+    for (let cell = 0; cell < 64; cell++) {
+      const b = document.createElement("button");
+      if ((Math.floor(cell / 8) + cell) % 2 === 1) b.classList.add("dark");
+      b.onclick = () => {
+        if (done) return;
+        if (placed.has(cell)) {
+          placed.delete(cell);
+          b.innerHTML = "";
+        } else {
+          placed.add(cell);
+          b.innerHTML = '<img src="/play/orbs/orb_freeze.png" alt="">';
+        }
+        countLabel.textContent = "Orbs placed: " + placed.size;
+        sendBoard(false);
+      };
+      box.appendChild(b);
+    }
+
+    doneBtn.onclick = () => {
+      if (done) return;
+      done = true;
+      stopBoardTimer();
+      sendBoard(true);
+      waitScreen("Board locked in!<br>" + placed.size + " orbs placed.<br>Watch the big screen.");
+    };
+
+    boardCountdown(msg.seconds || 30, () => {
+      if (!done) { done = true; waitScreen("Time's up!<br>" + placed.size + " orbs placed."); }
+    });
+    show("boardScreen");
+  }
+
   // ----- Mini-game: Bet on the Space Tire -----
   let tireTimer = null;
 
@@ -547,6 +638,7 @@
         stopOrbTimer();
         stopJarTimer();
         stopTireTimer();
+        stopBoardTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
@@ -554,6 +646,7 @@
       if (msg.type === "minigame" && msg.game === "orbmemory") startOrbMemory(msg);
       if (msg.type === "minigame" && msg.game === "orbjar") startOrbJar(msg);
       if (msg.type === "minigame" && msg.game === "spacetire") startSpaceTire(msg);
+      if (msg.type === "minigame" && msg.game === "checkerboard") startCheckerboard(msg);
       if (msg.type === "orbmemory_result") {
         stopOrbTimer();
         waitScreen(msg.correct ? "✅ You got it!" : "💥 Wrong order!<br>You're out.");
