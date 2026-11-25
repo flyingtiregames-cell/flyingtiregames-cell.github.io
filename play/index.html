@@ -51,9 +51,36 @@
   .orbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; justify-items: center; }
   .orbs button { background: none; padding: 0; width: 100%; max-width: 110px; border-radius: 50%; }
   .orbs button img { width: 100%; display: block; }
+  .chars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .chars button { background: rgba(255,255,255,0.1); color: #fff; padding: 8px 4px; font-size: 14px;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; border: 3px solid transparent; }
+  .chars button img { width: 100%; max-width: 84px; aspect-ratio: 1; object-fit: contain; }
+  .chars button small { font-size: 10px; opacity: 0.7; font-weight: 400; }
+  .chars button.mine { border-color: #ffb627; background: rgba(255,182,39,0.2); }
+  .chars button.taken { opacity: 0.3; }
+  .rail { display: grid; grid-template-columns: 1.7fr repeat(5, 1fr) 1fr; gap: 3px; align-items: center; }
+  .rail .cell { aspect-ratio: 1; background: #3d4a5e; border-radius: 5px; padding: 0; border: none; overflow: hidden; }
+  .rail .cell img { width: 100%; height: 100%; display: block; }
+  .rail .cell.lit { box-shadow: inset 0 0 0 3px #ffd23f; }
+  .rail .cell.crash { box-shadow: inset 0 0 0 4px #ff4d4d; background: #7a2b2b; }
+  .rail .train img { width: 100%; display: block; }
+  .rail .station { aspect-ratio: 1; background: #ffb627; color: #1b1530; border-radius: 8px; font-size: 9px;
+    font-weight: 800; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .rail .station span { font-size: 20px; }
+  .rail.frozen .cell { opacity: 0.5; }
+  #otGo { background: #3ecf6e; }
+  .ingredients { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .ingredients button { background: #fff; padding: 8px 2px; font-size: 13px; color: #1b1530; height: 92px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+  .ingredients button img { width: 100%; max-width: 70px; max-height: 48px; object-fit: contain; }
+  .ingredients.frozen button { opacity: 0.35; }
+  .stack { display: flex; flex-direction: column-reverse; align-items: center; min-height: 120px; justify-content: flex-start; }
+  .stack img { width: 120px; height: 28px; object-fit: contain; margin-top: -4px; }
+  .frozenMsg { color: #ff6b6b; font-weight: 800; text-align: center; min-height: 24px; }
+  #chefServe { background: #3ecf6e; display: none; }
   .board { display: grid; grid-template-columns: repeat(8, 1fr); border: 6px solid #8a4a22; border-radius: 6px; }
-  .board button { aspect-ratio: 1; padding: 0; border-radius: 0; background: #d6d2ca; }
-  .board button.dark { background: #6e6a66; }
+  .board { background: #fff; }
+  .board button { aspect-ratio: 1; padding: 0; border-radius: 0; background: #fff; border: 1px solid #e6e6e6; }
   .board button img { width: 86%; display: block; margin: auto; }
   .board button:active { transform: none; }
   .tires { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
@@ -110,6 +137,29 @@
   <div class="orbs" id="omOrbs"></div>
 </div>
 
+<div id="charScreen" class="screen">
+  <div class="msg" id="charTitle">Pick your character!</div>
+  <div class="chars" id="charGrid"></div>
+  <div class="hint">Waiting for the host to start the game…</div>
+</div>
+
+<div id="onTimeScreen" class="screen">
+  <div class="msg" id="otTitle">Tap squares to lay track.<br>Get the train to the station!</div>
+  <div class="seconds" id="otSeconds"></div>
+  <div class="rail" id="otGrid"></div>
+  <div class="frozenMsg" id="otMsg"></div>
+  <button id="otGo">Go!</button>
+</div>
+
+<div id="chefeeScreen" class="screen">
+  <div class="msg" id="chefTitle"></div>
+  <div class="seconds" id="chefSeconds"></div>
+  <div class="stack" id="chefStack"></div>
+  <div class="frozenMsg" id="chefFrozen"></div>
+  <div class="ingredients" id="chefButtons"></div>
+  <button id="chefServe">Serve!</button>
+</div>
+
 <div id="boardScreen" class="screen">
   <div class="msg" id="cbTitle"></div>
   <div class="seconds" id="cbSeconds"></div>
@@ -124,8 +174,15 @@
   <div class="tires" id="tireButtons"></div>
 </div>
 
+<div id="alienScreen" class="screen">
+  <div class="msg">Count every alien on the big screen!<br><small>Every kind. The flying one counts once.</small></div>
+  <div class="seconds" id="alienSeconds"></div>
+  <input id="alienGuess" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="How many?" min="0" max="999">
+  <button id="alienBtn">Lock In Count</button>
+</div>
+
 <div id="jarScreen" class="screen">
-  <div class="msg">How many orbs are in the jar?</div>
+  <div class="msg">How many candies are in the jar?</div>
   <div class="seconds" id="jarSeconds"></div>
   <input id="jarGuess" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Your guess" min="0" max="999">
   <button id="jarBtn">Lock In Guess</button>
@@ -491,6 +548,312 @@
     show("jarScreen");
   }
 
+  // ----- Character picker (lobby) -----
+  function showCharacters(msg) {
+    const taken = msg.taken || {};
+    let mine = null;
+    for (const image in taken) if (taken[image] === myId) mine = image;
+    const list = msg.list || [];
+    const current = list.find(c => c.image === mine);
+    document.getElementById("charTitle").innerHTML = current
+      ? "You're <b>" + current.name + "</b>!<br><small>Tap another to switch.</small>"
+      : "Pick your character!";
+
+    const grid = document.getElementById("charGrid");
+    grid.innerHTML = "";
+    list.forEach(c => {
+      const b = document.createElement("button");
+      const owner = taken[c.image];
+      if (owner === myId) b.classList.add("mine");
+      else if (owner) b.classList.add("taken");
+      b.innerHTML = '<img src="/play/characters/' + c.image + '.png" alt="" onerror="this.style.visibility=\'hidden\'">' +
+        c.name + (owner && owner !== myId ? "<small>Taken</small>" : "<small>" + (c.game || "&nbsp;") + "</small>");
+      b.onclick = () => {
+        if (owner && owner !== myId) return;
+        send({ type: "character", image: c.image });
+      };
+      grid.appendChild(b);
+    });
+    show("charScreen");
+  }
+
+  // ----- Mini-game: Count the Aliens -----
+  let alienTimer = null;
+
+  function stopAlienTimer() {
+    if (alienTimer) { clearInterval(alienTimer); alienTimer = null; }
+  }
+
+  function startCountAliens(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer(); stopBoardTimer(); stopChefTimer(); stopOnTimeTimer(); stopAlienTimer();
+    let done = false;
+    const input = document.getElementById("alienGuess");
+    input.value = "";
+
+    document.getElementById("alienBtn").onclick = () => {
+      if (done) return;
+      const guess = parseInt(input.value, 10);
+      if (isNaN(guess) || guess < 0 || guess > 999) return;
+      done = true;
+      stopAlienTimer();
+      input.blur();
+      send({ type: "aliens", guess: guess });
+      waitScreen("Count locked in: " + guess + "<br>Watch the big screen.");
+    };
+
+    const seconds = msg.seconds || 20;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("alienSeconds");
+    label.textContent = seconds;
+    alienTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) {
+        stopAlienTimer();
+        if (!done) { done = true; input.blur(); waitScreen("Time's up!"); }
+      }
+    }, 200);
+
+    show("alienScreen");
+  }
+
+  // ----- Mini-game: On Time Arrival -----
+  // Pieces (same numbers as the host app): 0 empty, 1 straight left-right, 2 straight up-down,
+  // 3 curve left-bottom, 4 curve top-left, 5 curve top-right, 6 curve bottom-right.
+  const OT_CONN = { 1: ["L", "R"], 2: ["T", "B"], 3: ["L", "B"], 4: ["T", "L"], 5: ["T", "R"], 6: ["B", "R"] };
+  const OT_OPP = { L: "R", R: "L", T: "B", B: "T" };
+  const OT_MOVE = { L: [0, -1], R: [0, 1], T: [-1, 0], B: [1, 0] };
+  let otTimer = null;
+  let otAnim = null;
+
+  function stopOnTimeTimer() {
+    if (otTimer) { clearInterval(otTimer); otTimer = null; }
+    if (otAnim) { clearTimeout(otAnim); otAnim = null; }
+  }
+
+  function otPieceHTML(p) {
+    if (p === 1 || p === 2) return '<img src="/play/track/track_straight.png" style="transform: rotate(' + (p === 1 ? 90 : 0) + 'deg)" alt="">';
+    if (p >= 3) return '<img src="/play/track/track_curve.png" style="transform: rotate(' + ((p - 3) * 90) + 'deg)" alt="">';
+    return "";
+  }
+
+  function startOnTime(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer(); stopBoardTimer(); stopChefTimer(); stopOnTimeTimer();
+    const entry = msg.entryRow || 0, exitSide = msg.exitSide || "right", exitIndex = msg.exitIndex || 0;
+    const tileMs = (msg.tileSeconds || 0.3) * 1000;
+    const startedAt = Date.now();
+    const pieces = new Array(25).fill(0);
+    const cellEls = [];
+    let busy = false, finished = false;
+
+    const grid = document.getElementById("otGrid");
+    const note = document.getElementById("otMsg");
+    const goBtn = document.getElementById("otGo");
+    grid.innerHTML = ""; note.textContent = ""; grid.classList.remove("frozen");
+    goBtn.style.display = "";
+
+    const stationHTML = '<div class="station"><span>🚉</span>STATION</div>';
+    // 7 rows x 7 columns: row 0 and 6 hold a top/bottom station, column 0 the train, column 6 a right station
+    for (let row = 0; row < 7; row++) {
+      for (let col = 0; col < 7; col++) {
+        const slot = document.createElement("div");
+        const r = row - 1, c = col - 1;
+        if (r >= 0 && r < 5 && c >= 0 && c < 5) {
+          const b = document.createElement("button");
+          b.className = "cell";
+          const index = r * 5 + c;
+          b.onclick = () => {
+            if (busy || finished) return;
+            pieces[index] = (pieces[index] + 1) % 7;
+            b.innerHTML = otPieceHTML(pieces[index]);
+          };
+          cellEls[index] = b;
+          grid.appendChild(b);
+          continue;
+        }
+        if (col === 0 && r === entry) slot.className = "train", slot.innerHTML = '<img src="/play/track/train.png" alt="">';
+        if (exitSide === "right" && col === 6 && r === exitIndex) slot.innerHTML = stationHTML;
+        if (exitSide === "top" && row === 0 && c === exitIndex) slot.innerHTML = stationHTML;
+        if (exitSide === "bottom" && row === 6 && c === exitIndex) slot.innerHTML = stationHTML;
+        grid.appendChild(slot);
+      }
+    }
+
+    // Follow the track from the train. Returns the cells travelled and whether it reached the station.
+    function trace() {
+      let r = entry, c = 0, from = "L";
+      const path = [];
+      while (path.length <= 25) {
+        if (r < 0 || r > 4 || c < 0 || c > 4) {
+          const ok = (exitSide === "right" && c === 5 && r === exitIndex) ||
+                     (exitSide === "top" && r === -1 && c === exitIndex) ||
+                     (exitSide === "bottom" && r === 5 && c === exitIndex);
+          return { path: path, ok: ok, crashAt: ok ? null : path[path.length - 1] };
+        }
+        const index = r * 5 + c;
+        const sides = OT_CONN[pieces[index]];
+        if (!sides || !sides.includes(from)) return { path: path, ok: false, crashAt: index };
+        const out = sides[0] === from ? sides[1] : sides[0];
+        path.push(index);
+        r += OT_MOVE[out][0]; c += OT_MOVE[out][1];
+        from = OT_OPP[out];
+      }
+      return { path: path, ok: false, crashAt: path[path.length - 1] };
+    }
+
+    function animate(path, step, done) {
+      if (step >= path.length) { done(); return; }
+      cellEls[path[step]].classList.add("lit");
+      otAnim = setTimeout(() => animate(path, step + 1, done), tileMs);
+    }
+
+    goBtn.onclick = () => {
+      if (busy || finished) return;
+      busy = true;
+      const result = trace();
+      if (result.ok) {
+        finished = true;
+        const ms = Date.now() - startedAt + result.path.length * tileMs;
+        send({ type: "ontime", ms: Math.round(ms), cells: pieces });
+        goBtn.style.display = "none";
+        note.textContent = "";
+        animate(result.path, 0, () => {
+          stopOnTimeTimer();
+          waitScreen("🚉 Arrived in " + (ms / 1000).toFixed(2) + " seconds!<br>Watch the big screen.");
+        });
+      } else {
+        send({ type: "ontime", crash: true });
+        animate(result.path, 0, () => {
+          if (result.crashAt !== null && result.crashAt !== undefined) cellEls[result.crashAt].classList.add("crash");
+          if (navigator.vibrate) navigator.vibrate(300);
+          note.textContent = "💥 Derailed! Fix your track…";
+          grid.classList.add("frozen");
+          otAnim = setTimeout(() => {
+            cellEls.forEach(el => el.classList.remove("lit", "crash"));
+            grid.classList.remove("frozen");
+            note.textContent = "";
+            busy = false;
+          }, 2000);
+        });
+      }
+    };
+
+    const seconds = msg.seconds || 45;
+    const endAt = startedAt + seconds * 1000;
+    const label = document.getElementById("otSeconds");
+    label.textContent = seconds;
+    otTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0 && !finished) {
+        finished = true;
+        clearInterval(otTimer); otTimer = null;
+        waitScreen("Time's up!<br>The train missed the station.");
+      }
+    }, 200);
+
+    show("onTimeScreen");
+  }
+
+  // ----- Mini-game: Chefee -----
+  let chefTimer = null;
+  let chefFreezeTimer = null;
+
+  function stopChefTimer() {
+    if (chefTimer) { clearInterval(chefTimer); chefTimer = null; }
+    if (chefFreezeTimer) { clearTimeout(chefFreezeTimer); chefFreezeTimer = null; }
+  }
+
+  function chefRecipe(kind) {
+    const r = ["bottom_bun", "patty", "cheese", "lettuce"];
+    if (kind !== "plain") r.push(kind);
+    r.push("top_bun");
+    return r;
+  }
+
+  function startChefee(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer(); stopBoardTimer(); stopChefTimer();
+    const burgers = msg.burgers || ["plain", "plain", "plain"];
+    const recipes = burgers.map(chefRecipe);
+    const freezeMs = (msg.freeze || 1.5) * 1000;
+    const startedAt = Date.now();
+    let burger = 0, step = 0, wrongs = 0, frozen = false, finished = false;
+
+    const title = document.getElementById("chefTitle");
+    const stack = document.getElementById("chefStack");
+    const frozenMsg = document.getElementById("chefFrozen");
+    const box = document.getElementById("chefButtons");
+    const serve = document.getElementById("chefServe");
+    serve.style.display = "none";
+    frozenMsg.textContent = "";
+    stack.innerHTML = "";
+    box.classList.remove("frozen");
+
+    const showTitle = () => {
+      title.innerHTML = burger < 3 ? "Burger " + (burger + 1) + " of 3<br><small>Build it bottom to top</small>" : "All 3 built!";
+    };
+    showTitle();
+
+    box.innerHTML = "";
+    (msg.buttons || ["bottom_bun", "patty", "cheese", "lettuce", "onions", "pickles", "tomato", "top_bun"]).forEach(item => {
+      const b = document.createElement("button");
+      const label = item.replace("_", " ");
+      b.innerHTML = '<img src="/play/chefee/chefee_' + item + '.png" alt="">' + label.charAt(0).toUpperCase() + label.slice(1);
+      b.onclick = () => {
+        if (frozen || finished || burger >= 3) return;
+        if (item === recipes[burger][step]) {
+          const img = document.createElement("img");
+          img.src = "/play/chefee/chefee_" + item + ".png";
+          stack.appendChild(img);
+          step++;
+          if (step === recipes[burger].length) {
+            burger++; step = 0;
+            send({ type: "chefee", done: burger, wrongs: wrongs });
+            setTimeout(() => { if (!finished) stack.innerHTML = ""; }, 300);
+            showTitle();
+            if (burger === 3) serve.style.display = "";
+          }
+        } else {
+          wrongs++;
+          frozen = true;
+          box.classList.add("frozen");
+          frozenMsg.textContent = "Wrong! Frozen…";
+          if (navigator.vibrate) navigator.vibrate(200);
+          chefFreezeTimer = setTimeout(() => {
+            frozen = false;
+            box.classList.remove("frozen");
+            frozenMsg.textContent = "";
+          }, freezeMs);
+        }
+      };
+      box.appendChild(b);
+    });
+
+    serve.onclick = () => {
+      if (finished || burger < 3) return;
+      finished = true;
+      const ms = Date.now() - startedAt;
+      stopChefTimer();
+      send({ type: "chefee", served: true, ms: ms, wrongs: wrongs, done: 3 });
+      waitScreen("Order up! " + (ms / 1000).toFixed(2) + " seconds<br>Watch the big screen.");
+    };
+
+    const seconds = msg.seconds || 45;
+    const endAt = startedAt + seconds * 1000;
+    const label = document.getElementById("chefSeconds");
+    label.textContent = seconds;
+    chefTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) {
+        stopChefTimer();
+        if (!finished) { finished = true; waitScreen("Time's up!<br>The kitchen is closed."); }
+      }
+    }, 200);
+
+    show("chefeeScreen");
+  }
+
   // ----- Mini-game: Checkerboard Memory -----
   let cbTimer = null;
 
@@ -539,7 +902,6 @@
 
     for (let cell = 0; cell < 64; cell++) {
       const b = document.createElement("button");
-      if ((Math.floor(cell / 8) + cell) % 2 === 1) b.classList.add("dark");
       b.onclick = () => {
         if (done) return;
         if (placed.has(cell)) {
@@ -624,7 +986,10 @@
 
       if (msg.type === "welcome") {
         reconnectTries = 0;
-        waitScreen("You're in!<br>Watch the big screen.");
+        // The character list may already be showing; don't cover it
+        if (!document.getElementById("charScreen").classList.contains("on")) {
+          waitScreen("You're in!<br>Watch the big screen.");
+        }
       }
       if (msg.type === "error") {
         stopTimer();
@@ -639,6 +1004,9 @@
         stopJarTimer();
         stopTireTimer();
         stopBoardTimer();
+        stopChefTimer();
+        stopOnTimeTimer();
+        stopAlienTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
@@ -647,6 +1015,10 @@
       if (msg.type === "minigame" && msg.game === "orbjar") startOrbJar(msg);
       if (msg.type === "minigame" && msg.game === "spacetire") startSpaceTire(msg);
       if (msg.type === "minigame" && msg.game === "checkerboard") startCheckerboard(msg);
+      if (msg.type === "minigame" && msg.game === "chefee") startChefee(msg);
+      if (msg.type === "minigame" && msg.game === "ontime") startOnTime(msg);
+      if (msg.type === "minigame" && msg.game === "aliens") startCountAliens(msg);
+      if (msg.type === "characters") showCharacters(msg);
       if (msg.type === "orbmemory_result") {
         stopOrbTimer();
         waitScreen(msg.correct ? "✅ You got it!" : "💥 Wrong order!<br>You're out.");
