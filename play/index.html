@@ -29,6 +29,13 @@
   .answers button { background: #fff; text-align: left; }
   .answers button.picked { background: #ffb627; }
   #lockBtn { background: #7dffa0; display: none; }
+  #wagerBtn { background: rgba(255,255,255,0.12); color: #fff; border: 2px dashed #ffb627; display: none; font-size: 18px; }
+  #wagerBtn.on { background: #ffb627; color: #1b1530; border-style: solid; }
+  .qLabel { font-size: 14px; opacity: 0.7; text-align: center; }
+  .amList { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .amList button { background: rgba(255,255,255,0.1); color: #fff; font-size: 16px; padding: 10px 4px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .amList button img { width: 64px; height: 64px; object-fit: contain; }
   .hint { font-size: 15px; opacity: 0.75; text-align: center; }
   .msg { font-size: 20px; text-align: center; line-height: 1.4; }
   .error { color: #ff8a8a; font-size: 16px; text-align: center; min-height: 20px; }
@@ -108,12 +115,20 @@
 </div>
 
 <div id="question" class="screen">
+  <div class="qLabel" id="qLabel"></div>
   <div class="seconds" id="secondsLeft"></div>
   <div class="timer"><div id="timerBar"></div></div>
   <div class="msg" id="qText"></div>
   <div class="hint" id="qHint"></div>
+  <button id="wagerBtn"></button>
   <div class="answers" id="answers"></div>
   <button id="lockBtn">Lock In</button>
+</div>
+
+<div id="amScreen" class="screen">
+  <div class="msg">⚛️ You won <b>Anti-Matter</b>!<br><small>Pick a player. The next time they try to use a token, it's cancelled. Nobody will know until the end.</small></div>
+  <div class="seconds" id="amSeconds"></div>
+  <div class="amList" id="amList"></div>
 </div>
 
 <div id="meterScreen" class="screen">
@@ -213,6 +228,8 @@
   let currentQid = null;
   let picks = [];          // option indexes this player picked
   let lockedIn = false;
+  let wagering = false;       // final round: spending a token on this question
+  let isFinalRound = false;
   let timerHandle = null;
 
   function pid() {
@@ -266,14 +283,40 @@
     if (lockedIn || picks.length === 0) return;
     lockedIn = true;
     // "choice" is kept for the old host test screen
-    send({ type: "answer", qid: currentQid, picks: picks, choice: picks[0] });
-    setTimeout(() => waitScreen("Locked in!<br>Waiting for everyone else."), 300);
+    send({ type: "answer", qid: currentQid, picks: picks, choice: picks[0], wager: wagering });
+    const note = wagering ? "Locked in with a 🪙 token!" : "Locked in!";
+    setTimeout(() => waitScreen(note + "<br>Waiting for everyone else."), 300);
   }
 
   function showQuestion(msg) {
     currentQid = msg.qid;
     picks = [];
     lockedIn = false;
+    wagering = false;
+    isFinalRound = !!msg.final;
+
+    document.getElementById("qLabel").textContent = msg.number
+      ? (msg.final ? "Final round · " : "") + "Question " + msg.number + " of 4" : "";
+
+    // Final round: spend a token to double this question (set it before answering)
+    const wagerBtn = document.getElementById("wagerBtn");
+    const myTokens = msg.tokens || 0;
+    if (msg.final && myTokens > 0) {
+      const label = () => wagering
+        ? "🪙 Token ON: this question is worth double"
+        : "🪙 Use a token to double this question (" + myTokens + " left)";
+      wagerBtn.textContent = label();
+      wagerBtn.classList.remove("on");
+      wagerBtn.style.display = "block";
+      wagerBtn.onclick = () => {
+        if (lockedIn) return;
+        wagering = !wagering;
+        wagerBtn.classList.toggle("on", wagering);
+        wagerBtn.textContent = label();
+      };
+    } else {
+      wagerBtn.style.display = "none";
+    }
 
     const multi = msg.qtype === "multi";
     document.getElementById("qText").textContent = msg.text || "";
@@ -546,6 +589,44 @@
     }, 200);
 
     show("jarScreen");
+  }
+
+  // ----- Anti-Matter (Do Better winner picks a target) -----
+  let amTimer = null;
+  function stopAntiMatterTimer() {
+    if (amTimer) { clearInterval(amTimer); amTimer = null; }
+  }
+
+  function showAntiMatter(msg) {
+    stopTimer(); stopAntiMatterTimer();
+    let done = false;
+    const list = document.getElementById("amList");
+    list.innerHTML = "";
+    (msg.players || []).forEach(p => {
+      const b = document.createElement("button");
+      b.innerHTML = (p.image ? '<img src="/play/characters/' + p.image + '.png" alt="" onerror="this.style.visibility=\'hidden\'">' : "") + p.name;
+      b.onclick = () => {
+        if (done) return;
+        done = true;
+        stopAntiMatterTimer();
+        send({ type: "antimatter", target: p.pid });
+        waitScreen("⚛️ Anti-Matter sent to <b>" + p.name + "</b>.<br>Shh. It's a secret.");
+      };
+      list.appendChild(b);
+    });
+    const seconds = msg.seconds || 20;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("amSeconds");
+    label.textContent = seconds;
+    amTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) {
+        stopAntiMatterTimer();
+        if (!done) { done = true; waitScreen("Time's up!<br>Your Anti-Matter goes to a random player."); }
+      }
+    }, 200);
+    show("amScreen");
   }
 
   // ----- Character picker (lobby) -----
@@ -1007,6 +1088,7 @@
         stopChefTimer();
         stopOnTimeTimer();
         stopAlienTimer();
+        stopAntiMatterTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
@@ -1019,6 +1101,7 @@
       if (msg.type === "minigame" && msg.game === "ontime") startOnTime(msg);
       if (msg.type === "minigame" && msg.game === "aliens") startCountAliens(msg);
       if (msg.type === "characters") showCharacters(msg);
+      if (msg.type === "antimatter") showAntiMatter(msg);
       if (msg.type === "orbmemory_result") {
         stopOrbTimer();
         waitScreen(msg.correct ? "✅ You got it!" : "💥 Wrong order!<br>You're out.");
@@ -1038,8 +1121,9 @@
       if (msg.type === "reveal") showReveal(msg);
       if (msg.type === "score") {
         // Sent privately to this phone after a reveal
-        document.getElementById("pointsText").textContent =
-          (msg.points > 0 ? "+" + msg.points + " points · " : "") + "Total: " + msg.total;
+        document.getElementById("pointsText").textContent = msg.hidden
+          ? "Scores are secret until the end 🤫"
+          : (msg.points > 0 ? "+" + msg.points + " points · " : "") + "Total: " + msg.total;
       }
     };
 
