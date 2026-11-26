@@ -29,6 +29,14 @@
   .answers button { background: #fff; text-align: left; }
   .answers button.picked { background: #ffb627; }
   #lockBtn { background: #7dffa0; display: none; }
+  #vipBar { position: fixed; left: 0; right: 0; bottom: 0; display: none; flex-direction: column; gap: 8px;
+    padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); background: rgba(20,14,40,0.96);
+    border-top: 2px solid #ffb627; }
+  #vipBar .vipLabel { font-size: 13px; text-align: center; color: #ffb627; font-weight: 700; }
+  #vipBar .vipButtons { display: flex; gap: 10px; }
+  #vipBar button { font-size: 18px; padding: 14px; }
+  #vipBar button.secondary { background: rgba(255,255,255,0.15); color: #fff; }
+  body.vip { padding-bottom: 150px; }
   #wagerBtn { background: rgba(255,255,255,0.12); color: #fff; border: 2px dashed #ffb627; display: none; font-size: 18px; }
   #wagerBtn.on { background: #ffb627; color: #1b1530; border-style: solid; }
   .qLabel { font-size: 14px; opacity: 0.7; text-align: center; }
@@ -155,7 +163,7 @@
 <div id="charScreen" class="screen">
   <div class="msg" id="charTitle">Pick your character!</div>
   <div class="chars" id="charGrid"></div>
-  <div class="hint">Waiting for the host to start the game…</div>
+  <div class="hint">Waiting for the 👑 Top Titaner to start the game…</div>
 </div>
 
 <div id="onTimeScreen" class="screen">
@@ -213,6 +221,11 @@
   <div id="resultText"></div>
   <div class="points" id="pointsText"></div>
   <div class="msg">Watch the big screen.</div>
+</div>
+
+<div id="vipBar">
+  <div class="vipLabel">👑 You're the Top Titaner</div>
+  <div class="vipButtons" id="vipButtons"></div>
 </div>
 
 <script>
@@ -589,6 +602,31 @@
     }, 200);
 
     show("jarScreen");
+  }
+
+  // ----- Top Titaner (first player in: runs the game from their phone) -----
+  function showVipBar(msg) {
+    const bar = document.getElementById("vipBar");
+    const box = document.getElementById("vipButtons");
+    box.innerHTML = "";
+    const add = (label, action, secondary) => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      if (secondary) b.className = "secondary";
+      b.onclick = () => send({ type: "vip", action: action });
+      box.appendChild(b);
+    };
+    if (msg.stage === "lobby") {
+      add("Everybody's in, start!", "start");
+    } else if (msg.stage === "game" && msg.canSkip) {
+      add("Skip ⏭", "next", true);
+    } else if (msg.stage === "gameover") {
+      add("Rematch", "rematch");
+      add("Back to Lobby", "lobby", true);
+    }
+    const visible = box.children.length > 0;
+    bar.style.display = visible ? "flex" : "none";
+    document.body.classList.toggle("vip", visible);
   }
 
   // ----- Anti-Matter (Do Better winner picks a target) -----
@@ -1102,6 +1140,7 @@
       if (msg.type === "minigame" && msg.game === "aliens") startCountAliens(msg);
       if (msg.type === "characters") showCharacters(msg);
       if (msg.type === "antimatter") showAntiMatter(msg);
+      if (msg.type === "vip") showVipBar(msg);
       if (msg.type === "orbmemory_result") {
         stopOrbTimer();
         waitScreen(msg.correct ? "✅ You got it!" : "💥 Wrong order!<br>You're out.");
