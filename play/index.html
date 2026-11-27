@@ -109,6 +109,8 @@
   .keypad button { font-size: 26px; padding: 14px 0; background: #fff; }
   .keypad button.go { background: #3ecf6e; }
   .keypad.locked button { opacity: 0.35; }
+  #linguistGuess { text-transform: uppercase; font-size: 22px; letter-spacing: 1px; text-align: center; }
+  #linguistGuess.wrong { background: #ff6b6b; }
   .paintPicks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .paintPicks button { font-size: 44px; padding: 34px 0; background: #fff; }
   .paintPicks button.picked { background: #ffb627; }
@@ -207,6 +209,14 @@
   <div class="msg" id="hatchTitle"></div>
   <div class="seconds" id="hatchSeconds"></div>
   <div class="hatches" id="hatchButtons"></div>
+</div>
+
+<div id="linguistScreen" class="screen">
+  <div class="msg">👽 Decode the message on the big screen!</div>
+  <div class="seconds" id="linguistSeconds"></div>
+  <input id="linguistGuess" type="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" placeholder="Type the message">
+  <div class="hint" id="linguistHint">Spaces and capitals don't matter. Fastest right answer wins!</div>
+  <button id="linguistSend">Submit</button>
 </div>
 
 <div id="romanScreen" class="screen">
@@ -1063,6 +1073,88 @@
     show("hatchScreen");
   }
 
+  // ----- Mini-game: Alien Linguist -----
+  let linguistTimer = null;
+  let linguistLockTimer = null;
+  let linguistLockMs = 2000;
+  let linguistDone = false;
+  let linguistLocked = false;
+  function stopLinguistTimer() {
+    if (linguistTimer) { clearInterval(linguistTimer); linguistTimer = null; }
+    if (linguistLockTimer) { clearTimeout(linguistLockTimer); linguistLockTimer = null; }
+  }
+
+  function startLinguist(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer(); stopChefTimer(); stopOnTimeTimer(); stopAlienTimer(); stopPaintTimer(); stopRomanTimer(); stopHatchTimer(); stopLinguistTimer();
+    linguistDone = false;
+    linguistLocked = false;
+    linguistLockMs = (msg.lock || 2) * 1000;
+    const input = document.getElementById("linguistGuess");
+    const button = document.getElementById("linguistSend");
+    input.value = "";
+    input.className = "";
+    input.disabled = false;
+    button.disabled = false;
+    document.getElementById("linguistHint").textContent = "Spaces and capitals don't matter. Fastest right answer wins!";
+
+    const seconds = msg.seconds || 45;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("linguistSeconds");
+    label.textContent = seconds;
+    linguistTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0 && !linguistDone) {
+        linguistDone = true;
+        stopLinguistTimer();
+        input.blur();
+        waitScreen("Time's up!<br>Watch the big screen.");
+      }
+    }, 200);
+    show("linguistScreen");
+    input.focus();
+  }
+
+  function sendLinguist() {
+    if (linguistDone || linguistLocked) return;
+    const input = document.getElementById("linguistGuess");
+    const guess = input.value.trim();
+    if (!guess) return;
+    linguistLocked = true;
+    document.getElementById("linguistSend").disabled = true;
+    send({ type: "linguist", guess: guess });
+  }
+
+  function linguistResult(msg) {
+    const input = document.getElementById("linguistGuess");
+    const button = document.getElementById("linguistSend");
+    const hint = document.getElementById("linguistHint");
+    if (msg.ok) {
+      linguistDone = true;
+      stopLinguistTimer();
+      input.blur();
+      waitScreen("✅ You cracked it!<br>Watch the big screen.");
+      return;
+    }
+    input.className = "wrong";
+    input.disabled = true;
+    hint.textContent = "Not quite! Locked for " + (linguistLockMs / 1000) + " seconds…";
+    if (navigator.vibrate) navigator.vibrate(200);
+    linguistLockTimer = setTimeout(() => {
+      linguistLocked = false;
+      input.className = "";
+      input.disabled = false;
+      button.disabled = false;
+      hint.textContent = "Try again! Spaces and capitals don't matter.";
+      input.focus();
+    }, linguistLockMs);
+  }
+
+  document.getElementById("linguistSend").onclick = sendLinguist;
+  document.getElementById("linguistGuess").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); sendLinguist(); }
+  });
+
   // ----- Mini-game: Roman Numeral Math (teams) -----
   let romanTimer = null;
   let romanLockTimer = null;
@@ -1350,6 +1442,7 @@
         stopPaintTimer();
         stopRomanTimer();
         stopHatchTimer();
+        stopLinguistTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
@@ -1361,6 +1454,8 @@
       if (msg.type === "minigame" && msg.game === "paint") startPaint(msg);
       if (msg.type === "minigame" && msg.game === "roman") startRoman(msg);
       if (msg.type === "minigame" && msg.game === "hatch") startHatch(msg);
+      if (msg.type === "minigame" && msg.game === "linguist") startLinguist(msg);
+      if (msg.type === "linguist") linguistResult(msg);
       if (msg.type === "minigame" && msg.game === "chefee") startChefee(msg);
       if (msg.type === "minigame" && msg.game === "ontime") startOnTime(msg);
       if (msg.type === "minigame" && msg.game === "aliens") startCountAliens(msg);
