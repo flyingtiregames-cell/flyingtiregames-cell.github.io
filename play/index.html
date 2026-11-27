@@ -93,6 +93,11 @@
   .stack img { width: 120px; height: 28px; object-fit: contain; margin-top: -4px; }
   .frozenMsg { color: #ff6b6b; font-weight: 800; text-align: center; min-height: 24px; }
   #chefServe { background: #3ecf6e; display: none; }
+  .hatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; justify-items: center; }
+  .hatches button { background: none; padding: 0; width: 100%; max-width: 110px; color: #fff; font-size: 20px; }
+  .hatches button img { width: 100%; display: block; }
+  .hatches button.picked img { filter: drop-shadow(0 0 10px #ffb627) brightness(1.2); }
+  .hatchRole { text-align: center; font-size: 15px; font-weight: 800; letter-spacing: 1px; color: #ffb627; }
   .romanTeam { text-align: center; font-weight: 800; font-size: 18px; }
   .romanProblem { text-align: center; font-family: Georgia, "Times New Roman", serif; font-size: 40px; font-weight: 700;
     color: #1b1530; background: linear-gradient(#f7d774, #d9a92e); border-radius: 14px; padding: 18px 8px; letter-spacing: 2px; }
@@ -195,6 +200,13 @@
   <div class="frozenMsg" id="chefFrozen"></div>
   <div class="ingredients" id="chefButtons"></div>
   <button id="chefServe">Serve!</button>
+</div>
+
+<div id="hatchScreen" class="screen">
+  <div class="hatchRole" id="hatchRole"></div>
+  <div class="msg" id="hatchTitle"></div>
+  <div class="seconds" id="hatchSeconds"></div>
+  <div class="hatches" id="hatchButtons"></div>
 </div>
 
 <div id="romanScreen" class="screen">
@@ -1002,6 +1014,55 @@
     show("chefeeScreen");
   }
 
+  // ----- Mini-game: Space Hatch (1 vs All) -----
+  let hatchTimer = null;
+  function stopHatchTimer() {
+    if (hatchTimer) { clearInterval(hatchTimer); hatchTimer = null; }
+  }
+
+  function startHatch(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer(); stopChefTimer(); stopOnTimeTimer(); stopAlienTimer(); stopPaintTimer(); stopRomanTimer(); stopHatchTimer();
+    const solo = msg.role === "solo";
+    let done = false;
+    document.getElementById("hatchRole").textContent =
+      (solo ? "YOU'RE THE SOLO" : "YOU'RE THE CREW") + " · ROUND " + msg.round + " OF " + msg.rounds;
+    document.getElementById("hatchTitle").innerHTML = solo
+      ? "Pick a hatch to <b>open</b>.<br><small>Space at least half the crew to win 2 tokens!</small>"
+      : "Pick a hatch to <b>stand on</b>.<br><small>Don't be on the one " + (msg.solo || "the solo") + " opens!</small>";
+
+    const box = document.getElementById("hatchButtons");
+    box.innerHTML = "";
+    (msg.hatches || []).forEach((image, i) => {
+      const b = document.createElement("button");
+      b.innerHTML = '<img src="/play/hatch/' + image + '.png" alt="">' + (i + 1);
+      b.onclick = () => {
+        if (done) return;
+        done = true;
+        b.classList.add("picked");
+        stopHatchTimer();
+        send({ type: "hatch", round: msg.round, hatch: i });
+        setTimeout(() => waitScreen(solo
+          ? "Hatch " + (i + 1) + " is armed. 😈<br>Watch the big screen."
+          : "You're standing on hatch " + (i + 1) + ".<br>Watch the big screen."), 300);
+      };
+      box.appendChild(b);
+    });
+
+    const seconds = msg.seconds || 10;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("hatchSeconds");
+    label.textContent = seconds;
+    hatchTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) {
+        stopHatchTimer();
+        if (!done) { done = true; waitScreen("Time's up!<br>You get a random hatch."); }
+      }
+    }, 200);
+    show("hatchScreen");
+  }
+
   // ----- Mini-game: Roman Numeral Math (teams) -----
   let romanTimer = null;
   let romanLockTimer = null;
@@ -1288,6 +1349,7 @@
         stopAntiMatterTimer();
         stopPaintTimer();
         stopRomanTimer();
+        stopHatchTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
@@ -1298,6 +1360,7 @@
       if (msg.type === "minigame" && msg.game === "checkerboard") startCheckerboard(msg);
       if (msg.type === "minigame" && msg.game === "paint") startPaint(msg);
       if (msg.type === "minigame" && msg.game === "roman") startRoman(msg);
+      if (msg.type === "minigame" && msg.game === "hatch") startHatch(msg);
       if (msg.type === "minigame" && msg.game === "chefee") startChefee(msg);
       if (msg.type === "minigame" && msg.game === "ontime") startOnTime(msg);
       if (msg.type === "minigame" && msg.game === "aliens") startCountAliens(msg);
