@@ -93,6 +93,9 @@
   .stack img { width: 120px; height: 28px; object-fit: contain; margin-top: -4px; }
   .frozenMsg { color: #ff6b6b; font-weight: 800; text-align: center; min-height: 24px; }
   #chefServe { background: #3ecf6e; display: none; }
+  .paintPicks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .paintPicks button { font-size: 44px; padding: 34px 0; background: #fff; }
+  .paintPicks button.picked { background: #ffb627; }
   .board { display: grid; grid-template-columns: repeat(8, 1fr); border: 6px solid #8a4a22; border-radius: 6px; }
   .board { background: #fff; }
   .board button { aspect-ratio: 1; padding: 0; border-radius: 0; background: #fff; border: 1px solid #e6e6e6; }
@@ -181,6 +184,12 @@
   <div class="frozenMsg" id="chefFrozen"></div>
   <div class="ingredients" id="chefButtons"></div>
   <button id="chefServe">Serve!</button>
+</div>
+
+<div id="paintScreen" class="screen">
+  <div class="msg" id="paintTitle"></div>
+  <div class="seconds" id="paintSeconds"></div>
+  <div class="paintPicks" id="paintPicks"></div>
 </div>
 
 <div id="boardScreen" class="screen">
@@ -973,6 +982,52 @@
     show("chefeeScreen");
   }
 
+  // ----- Mini-game: Paint oh Paint! (spot the real picture) -----
+  let paintTimer = null;
+  function stopPaintTimer() {
+    if (paintTimer) { clearInterval(paintTimer); paintTimer = null; }
+  }
+
+  function startPaint(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer(); stopChefTimer(); stopOnTimeTimer(); stopAlienTimer(); stopPaintTimer();
+    const picks = document.getElementById("paintPicks");
+    picks.innerHTML = "";
+    let done = false;
+    const seconds = msg.seconds || 10;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("paintSeconds");
+    label.textContent = seconds;
+
+    if (msg.stage === "study") {
+      document.getElementById("paintTitle").innerHTML = "Memorize the picture<br>on the big screen!";
+    } else {
+      document.getElementById("paintTitle").innerHTML = "Which picture is the real one?";
+      ["A", "B", "C", "D"].forEach((letter, i) => {
+        const b = document.createElement("button");
+        b.textContent = letter;
+        b.onclick = () => {
+          if (done) return;
+          done = true;
+          b.classList.add("picked");
+          stopPaintTimer();
+          send({ type: "paint", choice: i });
+          setTimeout(() => waitScreen("You picked " + letter + "!<br>Watch the big screen."), 300);
+        };
+        picks.appendChild(b);
+      });
+    }
+
+    paintTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) {
+        stopPaintTimer();
+        if (msg.stage !== "study" && !done) { done = true; waitScreen("Time's up!"); }
+      }
+    }, 200);
+    show("paintScreen");
+  }
+
   // ----- Mini-game: Checkerboard Memory -----
   let cbTimer = null;
 
@@ -1127,6 +1182,7 @@
         stopOnTimeTimer();
         stopAlienTimer();
         stopAntiMatterTimer();
+        stopPaintTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
@@ -1135,6 +1191,7 @@
       if (msg.type === "minigame" && msg.game === "orbjar") startOrbJar(msg);
       if (msg.type === "minigame" && msg.game === "spacetire") startSpaceTire(msg);
       if (msg.type === "minigame" && msg.game === "checkerboard") startCheckerboard(msg);
+      if (msg.type === "minigame" && msg.game === "paint") startPaint(msg);
       if (msg.type === "minigame" && msg.game === "chefee") startChefee(msg);
       if (msg.type === "minigame" && msg.game === "ontime") startOnTime(msg);
       if (msg.type === "minigame" && msg.game === "aliens") startCountAliens(msg);
