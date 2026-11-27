@@ -982,7 +982,7 @@
     box.innerHTML = "";
     (msg.buttons || ["bottom_bun", "patty", "cheese", "lettuce", "onions", "pickles", "tomato", "top_bun"]).forEach(item => {
       const b = document.createElement("button");
-      const label = item.replace("_", " ");
+      const label = item === "cheese" ? "slime" : item.replace("_", " ");
       b.innerHTML = '<img src="/play/chefee/chefee_' + item + '.png" alt="">' + label.charAt(0).toUpperCase() + label.slice(1);
       b.onclick = () => {
         if (frozen || finished || burger >= 3) return;
