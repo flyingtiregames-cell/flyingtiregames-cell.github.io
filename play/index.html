@@ -109,6 +109,15 @@
   .keypad button { font-size: 26px; padding: 14px 0; background: #fff; }
   .keypad button.go { background: #3ecf6e; }
   .keypad.locked button { opacity: 0.35; }
+  .thrustBtn { width: 230px; height: 230px; border-radius: 50%; margin: 20px auto; display: block; font-size: 30px; font-weight: 800;
+               background: radial-gradient(circle at 50% 35%, #ffb347, #e8590c); color: #fff; touch-action: none; user-select: none;
+               -webkit-user-select: none; -webkit-touch-callout: none; box-shadow: 0 8px 0 #9c3a06; }
+  .thrustBtn.on { transform: translateY(6px); box-shadow: 0 2px 0 #9c3a06; background: radial-gradient(circle at 50% 35%, #ffe066, #ff7b00); }
+  .thrustBtn:disabled { opacity: 0.4; }
+  .oddPad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; max-width: 340px; margin: 10px auto; }
+  .oddPad button { width: 100%; }
+  .oddPad button { font-size: 26px; font-weight: 800; padding: 16px 0; background: #fff; }
+  .oddPad.locked button { opacity: 0.3; }
   .pzBoard { display: grid; gap: 3px; margin: 6px auto; padding: 3px; background: rgba(255,255,255,0.15); border-radius: 10px; width: max-content; }
   .pzSlot { border: 2px dashed rgba(255,255,255,0.35); border-radius: 6px; box-sizing: border-box; position: relative; }
   .pzSlot.filled { border: none; }
@@ -225,6 +234,20 @@
   <div class="msg" id="hatchTitle"></div>
   <div class="seconds" id="hatchSeconds"></div>
   <div class="hatches" id="hatchButtons"></div>
+</div>
+
+<div id="landerScreen" class="screen">
+  <div class="msg" id="landerTitle">🚀 Titan Lander</div>
+  <div class="seconds" id="landerSeconds"></div>
+  <div class="hint" id="landerHint">Hold to fire your thruster. Land fast, but land soft!</div>
+  <button class="thrustBtn" id="thrustBtn">THRUST</button>
+</div>
+
+<div id="oddScreen" class="screen">
+  <div class="msg" id="oddTitle">👽 Find the odd alien!</div>
+  <div class="seconds" id="oddSeconds"></div>
+  <div class="hint" id="oddHint">Tap its number. A wrong tap locks you out until the next one.</div>
+  <div class="oddPad" id="oddPad"></div>
 </div>
 
 <div id="puzzleScreen" class="screen">
@@ -1104,6 +1127,121 @@
     show("hatchScreen");
   }
 
+  // ----- Mini-game: Titan Lander -----
+  let landerTimer = null;
+  let landerOn = false;
+  let landerDone = true;
+  function stopLanderTimer() {
+    if (landerTimer) { clearInterval(landerTimer); landerTimer = null; }
+    landerDone = true;
+    setThrust(false);
+  }
+  function setThrust(on) {
+    const btn = document.getElementById("thrustBtn");
+    if (on && landerDone) return;
+    if (on === landerOn) return;
+    landerOn = on;
+    btn.classList.toggle("on", on);
+    if (!landerDone || !on) send({ type: "thrust", on: on });
+  }
+
+  function startLander(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer(); stopChefTimer(); stopOnTimeTimer(); stopAlienTimer(); stopPaintTimer(); stopRomanTimer(); stopHatchTimer(); stopLinguistTimer(); stopFlashTimer(); stopPuzzleTimer(); stopLanderTimer(); stopOddTimer();
+    landerDone = false;
+    landerOn = false;
+    const btn = document.getElementById("thrustBtn");
+    btn.disabled = false;
+    btn.classList.remove("on");
+    document.getElementById("landerHint").textContent = "Hold to fire your thruster. Land fast, but land soft!";
+    const ready = (msg.ready || 2) * 1000;
+    const seconds = msg.seconds || 20;
+    const endAt = Date.now() + ready + seconds * 1000;
+    const label = document.getElementById("landerSeconds");
+    label.textContent = "Get ready…";
+    landerTimer = setInterval(() => {
+      const left = endAt - Date.now();
+      label.textContent = left > seconds * 1000 ? "Get ready…" : Math.max(0, Math.ceil(left / 1000));
+      if (left <= 0) { stopLanderTimer(); waitScreen("Time's up!<br>Watch the big screen."); }
+    }, 200);
+    show("landerScreen");
+  }
+
+  function landerResult(msg) {
+    stopLanderTimer();
+    document.getElementById("thrustBtn").disabled = true;
+    if (msg.crashed) {
+      if (navigator.vibrate) navigator.vibrate([100, 50, 300]);
+      waitScreen("💥 You crashed at " + msg.speed + " m/s!<br>Watch the big screen.");
+    } else {
+      waitScreen("🛬 Touchdown!<br>" + msg.score + " points (⚡" + msg.speed + " speed + 🪶" + msg.soft + " soft)<br>Watch the big screen.");
+    }
+  }
+
+  (function () {
+    const btn = document.getElementById("thrustBtn");
+    btn.addEventListener("pointerdown", (e) => { e.preventDefault(); btn.setPointerCapture(e.pointerId); setThrust(true); });
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach(ev => btn.addEventListener(ev, () => setThrust(false)));
+    btn.addEventListener("contextmenu", (e) => e.preventDefault());
+  })();
+
+  // ----- Mini-game: Odd Alien Out -----
+  let oddTimer = null;
+  let oddRound = 0;
+  let oddLocked = false;
+  let oddGoal = 3;
+  function stopOddTimer() {
+    if (oddTimer) { clearInterval(oddTimer); oddTimer = null; }
+  }
+
+  function startOdd(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer(); stopChefTimer(); stopOnTimeTimer(); stopAlienTimer(); stopPaintTimer(); stopRomanTimer(); stopHatchTimer(); stopLinguistTimer(); stopFlashTimer(); stopPuzzleTimer(); stopLanderTimer(); stopOddTimer();
+    oddGoal = msg.goal || 3;
+    oddLocked = true;
+    const pad = document.getElementById("oddPad");
+    pad.innerHTML = "";
+    pad.className = "oddPad locked";
+    for (let i = 0; i < (msg.count || 16); i++) {
+      const b = document.createElement("button");
+      b.textContent = i + 1;
+      b.onclick = () => {
+        if (oddLocked) return;
+        oddLocked = true;
+        pad.className = "oddPad locked";
+        send({ type: "odd", round: oddRound, pick: i });
+      };
+      pad.appendChild(b);
+    }
+    document.getElementById("oddHint").textContent = "Get ready…";
+    const seconds = msg.seconds || 90;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("oddSeconds");
+    label.textContent = seconds;
+    oddTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) { stopOddTimer(); waitScreen("Time's up!<br>Watch the big screen."); }
+    }, 200);
+    show("oddScreen");
+  }
+
+  function oddNewRound(msg) {
+    oddRound = msg.round;
+    oddLocked = false;
+    document.getElementById("oddPad").className = "oddPad";
+    document.getElementById("oddHint").textContent = "Round " + msg.round + ": tap the odd one's number!";
+  }
+
+  function oddResult(msg) {
+    const hint = document.getElementById("oddHint");
+    if (msg.ok) {
+      hint.textContent = "✅ Got it! " + msg.score + " of " + oddGoal;
+      if (navigator.vibrate) navigator.vibrate(40);
+    } else {
+      hint.textContent = "❌ Wrong! Locked until the next one.";
+      if (navigator.vibrate) navigator.vibrate(200);
+    }
+  }
+
   // ----- Mini-game: Puzzle Me This -----
   let puzzleTimer = null;
   let puzzleOver = true;
@@ -1702,6 +1840,8 @@
         stopFlashTimer();
         stopPuzzleTimer();
         puzzleOver = true;
+        stopLanderTimer();
+        stopOddTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
@@ -1718,6 +1858,11 @@
       if (msg.type === "minigame" && msg.game === "flash") startFlash(msg);
       if (msg.type === "flash") flashResult(msg);
       if (msg.type === "minigame" && msg.game === "puzzle") startPuzzle(msg);
+      if (msg.type === "minigame" && msg.game === "lander") startLander(msg);
+      if (msg.type === "lander") landerResult(msg);
+      if (msg.type === "minigame" && msg.game === "oddalien") startOdd(msg);
+      if (msg.type === "oddround") oddNewRound(msg);
+      if (msg.type === "odd") oddResult(msg);
       if (msg.type === "minigame" && msg.game === "chefee") startChefee(msg);
       if (msg.type === "minigame" && msg.game === "ontime") startOnTime(msg);
       if (msg.type === "minigame" && msg.game === "aliens") startCountAliens(msg);
