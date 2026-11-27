@@ -109,6 +109,14 @@
   .keypad button { font-size: 26px; padding: 14px 0; background: #fff; }
   .keypad button.go { background: #3ecf6e; }
   .keypad.locked button { opacity: 0.35; }
+  .pzBoard { display: grid; gap: 3px; margin: 6px auto; padding: 3px; background: rgba(255,255,255,0.15); border-radius: 10px; width: max-content; }
+  .pzSlot { border: 2px dashed rgba(255,255,255,0.35); border-radius: 6px; box-sizing: border-box; position: relative; }
+  .pzSlot.filled { border: none; }
+  .pzTray { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; min-height: 80px; margin-top: 10px; }
+  .pzPiece { border-radius: 6px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab;
+             box-shadow: 0 2px 6px rgba(0,0,0,0.4); background-repeat: no-repeat; }
+  .pzPiece.dragging { position: fixed; z-index: 50; box-shadow: 0 8px 20px rgba(0,0,0,0.6); cursor: grabbing; }
+  .pzPiece.placed { box-shadow: none; border-radius: 4px; }
   .flashPad { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; max-width: 340px; margin: 0 auto; }
   .flashPad button { background: none; padding: 0; border-radius: 50%; transition: transform 0.08s; }
   .flashPad button img { width: 100%; display: block; }
@@ -217,6 +225,14 @@
   <div class="msg" id="hatchTitle"></div>
   <div class="seconds" id="hatchSeconds"></div>
   <div class="hatches" id="hatchButtons"></div>
+</div>
+
+<div id="puzzleScreen" class="screen">
+  <div class="msg" id="pzTitle"></div>
+  <div class="seconds" id="pzSeconds"></div>
+  <div class="hint">Look at the big screen and drag the pieces into place.</div>
+  <div class="pzBoard" id="pzBoard"></div>
+  <div class="pzTray" id="pzTray"></div>
 </div>
 
 <div id="flashScreen" class="screen">
@@ -1088,6 +1104,166 @@
     show("hatchScreen");
   }
 
+  // ----- Mini-game: Puzzle Me This -----
+  let puzzleTimer = null;
+  let puzzleOver = true;
+  function stopPuzzleTimer() {
+    if (puzzleTimer) { clearInterval(puzzleTimer); puzzleTimer = null; }
+  }
+
+  function startPuzzle(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer(); stopChefTimer(); stopOnTimeTimer(); stopAlienTimer(); stopPaintTimer(); stopRomanTimer(); stopHatchTimer(); stopLinguistTimer(); stopFlashTimer(); stopPuzzleTimer();
+    const aliens = msg.aliens || [];
+    const colors = msg.colors || [];
+    const count = (msg.cols || 2) * (msg.rows || 3);    // 6 pieces
+    puzzleOver = false;
+    let current = 0;
+
+    const board = document.getElementById("pzBoard");
+    const tray = document.getElementById("pzTray");
+    const title = document.getElementById("pzTitle");
+
+    // Load the alien, trim its empty edges, and pick a wide (3x2) or tall (2x3) grid to match.
+    // The alien fills the whole card so no piece is blank.
+    function makeCard(index, done) {
+      const img = new Image();
+      img.onload = () => {
+        const t = document.createElement("canvas");
+        t.width = img.width; t.height = img.height;
+        const tc = t.getContext("2d");
+        tc.drawImage(img, 0, 0);
+        let x0 = img.width, y0 = img.height, x1 = 0, y1 = 0;
+        try {
+          const data = tc.getImageData(0, 0, img.width, img.height).data;
+          for (let y = 0; y < img.height; y += 2) {
+            for (let x = 0; x < img.width; x += 2) {
+              if (data[(y * img.width + x) * 4 + 3] > 30) {
+                if (x < x0) x0 = x; if (x > x1) x1 = x;
+                if (y < y0) y0 = y; if (y > y1) y1 = y;
+              }
+            }
+          }
+        } catch (e) { x0 = 0; y0 = 0; x1 = img.width; y1 = img.height; }
+        if (x1 <= x0 || y1 <= y0) { x0 = 0; y0 = 0; x1 = img.width; y1 = img.height; }
+        const sw = x1 - x0, sh = y1 - y0;
+        const cols = sw >= sh ? 3 : 2, rows = count / cols;
+        const cell = Math.floor(Math.min((window.innerWidth - 50) / cols, (window.innerHeight * 0.42) / rows, 120));
+        const canvas = document.createElement("canvas");
+        canvas.width = cell * cols * 2; canvas.height = cell * rows * 2;      // sharp on retina screens
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = colors[index] || "#5b3a9e";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Cover the card: crop the trimmed alien to the card's shape
+        const cardRatio = canvas.width / canvas.height;
+        let cw = sw, ch = sh, cx = x0, cy = y0;
+        if (sw / sh > cardRatio) { cw = sh * cardRatio; cx = x0 + (sw - cw) / 2; }
+        else { ch = sw / cardRatio; cy = y0 + (sh - ch) / 2; }
+        ctx.drawImage(img, cx, cy, cw, ch, 0, 0, canvas.width, canvas.height);
+        done(canvas.toDataURL("image/png"), cols, rows, cell);
+      };
+      img.onerror = () => done(null, 2, 3, 100);
+      img.src = "/play/aliens/" + aliens[index] + ".png";
+    }
+
+    function loadAlien() {
+      title.textContent = "Alien " + (current + 1) + " of " + aliens.length;
+      board.innerHTML = "";
+      tray.innerHTML = "";
+      makeCard(current, (url, cols, rows, cell) => {
+        if (puzzleOver) return;
+        const small = Math.floor(cell * 0.7);
+        function setPieceSize(el, size, slot) {
+          el.style.width = size + "px";
+          el.style.height = size + "px";
+          el.style.backgroundSize = (size * cols) + "px " + (size * rows) + "px";
+          el.style.backgroundPosition = (-(slot % cols) * size) + "px " + (-Math.floor(slot / cols) * size) + "px";
+        }
+        board.style.gridTemplateColumns = "repeat(" + cols + ", " + cell + "px)";
+        const slots = [];
+        for (let i = 0; i < count; i++) {
+          const slot = document.createElement("div");
+          slot.className = "pzSlot";
+          slot.style.width = cell + "px";
+          slot.style.height = cell + "px";
+          board.appendChild(slot);
+          slots.push(slot);
+        }
+        let placed = 0;
+        const order = [...Array(count).keys()].sort(() => Math.random() - 0.5);
+        order.forEach(slotIndex => {
+          const piece = document.createElement("div");
+          piece.className = "pzPiece";
+          piece.dataset.slot = slotIndex;
+          if (url) piece.style.backgroundImage = "url(" + url + ")";
+          else piece.style.background = colors[current] || "#5b3a9e";
+          setPieceSize(piece, small, slotIndex);
+          tray.appendChild(piece);
+
+          piece.addEventListener("pointerdown", (e) => {
+            if (puzzleOver || piece.classList.contains("placed")) return;
+            e.preventDefault();
+            piece.setPointerCapture(e.pointerId);
+            setPieceSize(piece, cell, slotIndex);
+            piece.classList.add("dragging");
+            piece.style.left = (e.clientX - cell / 2) + "px";
+            piece.style.top = (e.clientY - cell / 2) + "px";
+          });
+          piece.addEventListener("pointermove", (e) => {
+            if (!piece.classList.contains("dragging")) return;
+            piece.style.left = (e.clientX - cell / 2) + "px";
+            piece.style.top = (e.clientY - cell / 2) + "px";
+          });
+          const drop = (e) => {
+            if (!piece.classList.contains("dragging")) return;
+            piece.classList.remove("dragging");
+            piece.style.left = ""; piece.style.top = "";
+            const r = slots[slotIndex].getBoundingClientRect();
+            const inside = e.clientX >= r.left - 12 && e.clientX <= r.right + 12 &&
+                           e.clientY >= r.top - 12 && e.clientY <= r.bottom + 12;
+            if (inside && !puzzleOver) {
+              piece.classList.add("placed");
+              slots[slotIndex].classList.add("filled");
+              slots[slotIndex].appendChild(piece);
+              placed++;
+              if (navigator.vibrate) navigator.vibrate(20);
+              send({ type: "puzzle", alien: current, pieces: placed });
+              if (placed === count) {
+                current++;
+                if (current >= aliens.length) {
+                  puzzleOver = true;
+                  stopPuzzleTimer();
+                  waitScreen("🧩 You finished all " + aliens.length + "!<br>Watch the big screen.");
+                } else {
+                  setTimeout(loadAlien, 400);
+                }
+              }
+            } else {
+              setPieceSize(piece, small, slotIndex);     // back to the tray
+            }
+          };
+          piece.addEventListener("pointerup", drop);
+          piece.addEventListener("pointercancel", drop);
+        });
+      });
+    }
+
+    loadAlien();
+    const seconds = msg.seconds || 60;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("pzSeconds");
+    label.textContent = seconds;
+    puzzleTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) {
+        puzzleOver = true;
+        stopPuzzleTimer();
+        waitScreen("Time's up!<br>Watch the big screen.");
+      }
+    }, 200);
+    show("puzzleScreen");
+  }
+
   // ----- Mini-game: Flash Counter -----
   let flashTimer = null;
   let flashFreezeTimer = null;
@@ -1524,6 +1700,8 @@
         stopHatchTimer();
         stopLinguistTimer();
         stopFlashTimer();
+        stopPuzzleTimer();
+        puzzleOver = true;
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
@@ -1539,6 +1717,7 @@
       if (msg.type === "linguist") linguistResult(msg);
       if (msg.type === "minigame" && msg.game === "flash") startFlash(msg);
       if (msg.type === "flash") flashResult(msg);
+      if (msg.type === "minigame" && msg.game === "puzzle") startPuzzle(msg);
       if (msg.type === "minigame" && msg.game === "chefee") startChefee(msg);
       if (msg.type === "minigame" && msg.game === "ontime") startOnTime(msg);
       if (msg.type === "minigame" && msg.game === "aliens") startCountAliens(msg);
