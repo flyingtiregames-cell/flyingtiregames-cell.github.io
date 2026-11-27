@@ -109,6 +109,14 @@
   .keypad button { font-size: 26px; padding: 14px 0; background: #fff; }
   .keypad button.go { background: #3ecf6e; }
   .keypad.locked button { opacity: 0.35; }
+  .flashPad { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; max-width: 340px; margin: 0 auto; }
+  .flashPad button { background: none; padding: 0; border-radius: 50%; transition: transform 0.08s; }
+  .flashPad button img { width: 100%; display: block; }
+  .flashPad button:active { transform: scale(0.9); }
+  .flashPad.frozen button { opacity: 0.3; filter: grayscale(1); }
+  .flashScore { font-size: 34px; font-weight: 800; text-align: center; }
+  .flashScore.hit { color: #5fe08a; }
+  .flashScore.miss { color: #7fd8ff; }
   #linguistGuess { text-transform: uppercase; font-size: 22px; letter-spacing: 1px; text-align: center; }
   #linguistGuess.wrong { background: #ff6b6b; }
   .paintPicks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
@@ -209,6 +217,13 @@
   <div class="msg" id="hatchTitle"></div>
   <div class="seconds" id="hatchSeconds"></div>
   <div class="hatches" id="hatchButtons"></div>
+</div>
+
+<div id="flashScreen" class="screen">
+  <div class="msg">⚡ Tap the counter to the orb on the big screen!</div>
+  <div class="seconds" id="flashSeconds"></div>
+  <div class="flashScore" id="flashScore">0 / 10</div>
+  <div class="flashPad" id="flashPad"></div>
 </div>
 
 <div id="linguistScreen" class="screen">
@@ -1073,6 +1088,71 @@
     show("hatchScreen");
   }
 
+  // ----- Mini-game: Flash Counter -----
+  let flashTimer = null;
+  let flashFreezeTimer = null;
+  let flashGoal = 10;
+  let flashFrozen = false;
+  function stopFlashTimer() {
+    if (flashTimer) { clearInterval(flashTimer); flashTimer = null; }
+    if (flashFreezeTimer) { clearTimeout(flashFreezeTimer); flashFreezeTimer = null; }
+  }
+
+  function startFlash(msg) {
+    stopTimer(); stopMeterAnimation(); stopSafeBaseTimer(); stopOrbTimer(); stopJarTimer(); stopTireTimer(); stopChefTimer(); stopOnTimeTimer(); stopAlienTimer(); stopPaintTimer(); stopRomanTimer(); stopHatchTimer(); stopLinguistTimer(); stopFlashTimer();
+    flashGoal = msg.goal || 10;
+    flashFrozen = false;
+    const scoreEl = document.getElementById("flashScore");
+    scoreEl.className = "flashScore";
+    scoreEl.textContent = "0 / " + flashGoal;
+    const pad = document.getElementById("flashPad");
+    pad.className = "flashPad";
+    pad.innerHTML = "";
+    (msg.buttons || []).forEach((name, i) => {
+      const b = document.createElement("button");
+      b.innerHTML = '<img src="/play/orbs/' + name + '.png" alt="">';
+      b.onclick = () => { if (!flashFrozen) send({ type: "flash", button: i }); };
+      pad.appendChild(b);
+    });
+
+    const seconds = msg.seconds || 45;
+    const endAt = Date.now() + seconds * 1000;
+    const label = document.getElementById("flashSeconds");
+    label.textContent = seconds;
+    flashTimer = setInterval(() => {
+      const left = Math.max(0, endAt - Date.now());
+      label.textContent = Math.ceil(left / 1000);
+      if (left <= 0) {
+        stopFlashTimer();
+        waitScreen("Time's up!<br>Watch the big screen.");
+      }
+    }, 200);
+    show("flashScreen");
+  }
+
+  function flashResult(msg) {
+    const scoreEl = document.getElementById("flashScore");
+    const pad = document.getElementById("flashPad");
+    if (msg.ok) {
+      scoreEl.textContent = msg.score + " / " + flashGoal;
+      scoreEl.className = "flashScore hit";
+      setTimeout(() => { if (!flashFrozen) scoreEl.className = "flashScore"; }, 300);
+      return;
+    }
+    flashFrozen = true;
+    pad.className = "flashPad frozen";
+    scoreEl.className = "flashScore miss";
+    const before = scoreEl.textContent;
+    scoreEl.textContent = "❄️ Frozen!";
+    if (navigator.vibrate) navigator.vibrate(200);
+    flashFreezeTimer = setTimeout(() => {
+      flashFrozen = false;
+      pad.className = "flashPad";
+      scoreEl.className = "flashScore";
+      scoreEl.textContent = before;
+    }, (msg.freeze || 2) * 1000);
+  }
+
   // ----- Mini-game: Alien Linguist -----
   let linguistTimer = null;
   let linguistLockTimer = null;
@@ -1443,6 +1523,7 @@
         stopRomanTimer();
         stopHatchTimer();
         stopLinguistTimer();
+        stopFlashTimer();
         waitScreen(msg.text || "Watch the big screen.");
       }
       if (msg.type === "minigame" && msg.game === "meter") startMeter(msg);
@@ -1456,6 +1537,8 @@
       if (msg.type === "minigame" && msg.game === "hatch") startHatch(msg);
       if (msg.type === "minigame" && msg.game === "linguist") startLinguist(msg);
       if (msg.type === "linguist") linguistResult(msg);
+      if (msg.type === "minigame" && msg.game === "flash") startFlash(msg);
+      if (msg.type === "flash") flashResult(msg);
       if (msg.type === "minigame" && msg.game === "chefee") startChefee(msg);
       if (msg.type === "minigame" && msg.game === "ontime") startOnTime(msg);
       if (msg.type === "minigame" && msg.game === "aliens") startCountAliens(msg);
